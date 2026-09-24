@@ -1,5 +1,6 @@
+import CaptureButton from "@/components/CaptureButton";
 import { Ionicons } from "@expo/vector-icons";
-import { Camera, CameraType, CameraView } from "expo-camera";
+import { CameraType, CameraView } from "expo-camera";
 import { useRef, useState } from "react";
 import {
     Dimensions,
@@ -8,9 +9,8 @@ import {
     Modal,
     StyleSheet,
     TouchableOpacity,
-    View,
+    View
 } from "react-native";
-import CaptureButton from "@/components/CaptureButton";
 
 const {width,height}=Dimensions.get("screen");
 
@@ -19,6 +19,7 @@ export default function CameraViewComponent(){
     const [facing,setFacing] =useState<CameraType>("back");
     const [capturedImages, setCapturedImages]= useState<string[]>([]);
     const [showGallery, setShowGallery] = useState(false);
+    const [isflashon, setIsFlashOn] = useState(false);
 
     const takePhoto = async () => {
         if (!cameraRef.current) return;
@@ -36,10 +37,21 @@ export default function CameraViewComponent(){
 
     return(
         <View style={styles.container}>
-            <CameraView style={styles.camera} facing={facing} ref={cameraRef}/>
+            <CameraView style={styles.camera} facing={facing} ref={cameraRef} enableTorch={isflashon}/>
             <View style={styles.controls}>
                 <TouchableOpacity style={styles.galleryButton} onPress={openGallary}>
                 <Ionicons name="images" size={24} color="white"/>
+                </TouchableOpacity>
+                <TouchableOpacity
+                style={{ padding: 10 }}
+                onPress={() => setIsFlashOn(prev => !prev)}
+                >
+                    <Ionicons
+                    name={isflashon ? "flash" : "flash-off"}
+                    size={24}
+                    color="white"
+                    />
+
                 </TouchableOpacity>
 
                 <CaptureButton onPress={takePhoto}/>
