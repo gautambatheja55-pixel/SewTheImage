@@ -1,79 +1,4 @@
-import CaptureButton from "@/components/CaptureButton";
-import { Ionicons } from "@expo/vector-icons";
-import { CameraType, CameraView } from "expo-camera";
-import { useRef, useState } from "react";
-import {
-    Dimensions,
-    FlatList,
-    Image,
-    Modal,
-    StyleSheet,
-    TouchableOpacity,
-    View
-} from "react-native";
 
-const { width, height } = Dimensions.get("screen");
-
-export default function CameraViewComponent() {
-    const cameraRef = useRef<CameraView | null>(null);
-    const [facing, setFacing] = useState<CameraType>("back");
-    const [capturedImages, setCapturedImages] = useState<string[]>([]);
-    const [showGallery, setShowGallery] = useState(false);
-    
-    // DEBUGGED: State variable name properly mapped for modes
-    const [flashMode, setFlashMode] = useState<'off' | 'on' | 'auto'>('off');
-
-    const takePhoto = async () => {
-        if (!cameraRef.current) return;
-        const photo = await cameraRef.current.takePictureAsync();
-        setCapturedImages((prev) => [...prev, photo.uri]);
-    };
-
-    const flipCamera = () => {
-        setFacing((prev) => (prev === "back" ? "front" : "back"));
-    };
-
-    const openGallary = () => {
-        if (capturedImages.length > 0) {
-            setShowGallery(true);
-        }
-    };
-
-    return (
-        <View style={styles.container}>
-            {/* DEBUGGED: CameraView parameters fixed with correct state and reference */}
-            <CameraView
-                style={styles.camera}
-                facing={facing}
-                ref={cameraRef}
-                enableTorch={flashMode === 'on'}
-                flash={flashMode}
-            />
-
-            <View style={styles.controls}>
-                <TouchableOpacity style={styles.galleryButton} onPress={openGallary}>
-                    <Ionicons name="images" size={24} color="white" />
-                </TouchableOpacity>
-
-                {/* DEBUGGED: OnPress function curly braces and logic syntax fully fixed */}
-                <TouchableOpacity
-                    style={{ padding: 10 }}
-                    onPress={() => {
-                        setFlashMode((prev) => {
-                            if (prev === 'off') return 'on';
-                            if (prev === 'on') return 'auto';
-                            return 'off';
-                        });
-                    }}
-                >
-                    <Ionicons
-                        name={flashMode === 'on' ? 'flash' : 'flash-off'}
-                        size={24}
-                        color={flashMode === 'auto' ? '#FFD700' : 'white'}
-                    />
-                </TouchableOpacity>
-
-                <CaptureButton onPress={takePhoto} />
                 
                 <TouchableOpacity style={styles.flipButton} onPress={flipCamera}>
                     <Ionicons name="camera-reverse" size={24} color="white" />
@@ -166,3 +91,123 @@ const styles = StyleSheet.create({
         resizeMode: "contain",
     },
 });
+
+
+import CaptureButton from "@/components/CaptureButton";
+import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
+import { Ionicons } from "@expo/vector-icons";
+import { CameraType, CameraView } from "expo-camera";
+import { useRef, useState } from "react";
+import {
+    Dimensions,
+    FlatList,
+    Image,
+    Modal,
+    StyleSheet,
+    TouchableOpacity,
+    View
+} from "react-native";
+import { ZoomIn } from "react-native-reanimated";
+import { panGestureHandlerCustomNativeProps } from "react-native-gesture-handler/lib/typescript/handlers/PanGestureHandler";
+
+const { width, height } = Dimensions.get("screen");
+
+export default function CameraViewComponent() {
+    const cameraRef = useRef<CameraView | null>(null);
+    const [facing, setFacing] = useState<CameraType>("back");
+    const [capturedImages, setCapturedImages] = useState<string[]>([]);
+    const [showGallery, setShowGallery] = useState(false);
+    const [zoom, setZoom] = useState(0);
+    const baseScale = useRef(1);
+    const [flashMode, setFlashMode] = useState<'off' | 'on' | 'auto'>('off');
+
+    const takePhoto = async () => {
+        if (!cameraRef.current) return;
+        const photo = await cameraRef.current.takePictureAsync();
+        setCapturedImages((prev) => [...prev, photo.uri]);
+    };
+
+    const flipCamera = () => {
+        setFacing((prev) => (prev === "back" ? "front" : "back"));
+    };
+
+    const openGallary = () => {
+        if (capturedImages.length > 0) {
+            setShowGallery(true);
+        }
+    };
+
+    const pinchGesture = Gesture.Pinch()
+    .onStart(() => {
+        baseScale.current = zoom === 0 ? 1 : 1 + zoom * 5;
+
+    })
+    .onUpdate((event) => {
+        const newScale = baseScale.current * event.scale;
+
+        const newZoom = Math.max(0, Math.min(1, (newScale - 1) / 5));
+        setZoom(newZoom);
+    });
+
+    return (
+        <GestureHandlerRootView style={{ flex: 1 }}>
+            <View style={styles.container}>
+                <GestureDetector gesture={pinchGesture}>
+                    <CameraView
+                    style={styles.camera}
+                    facing={facing}
+                    ref={cameraRef}
+                    enableTorch={flashMode === 'on'}
+                    flash={flashMode}
+                    zoom={zoom}
+
+                    />
+                    
+                    </GestureDetector>
+                    </View>
+                    </GestureHandlerRootView>
+
+                    )
+
+    return (
+        <View style={styles.container}>
+            <CameraView
+                style={styles.camera}
+                facing={facing}
+                ref={cameraRef}
+                enableTorch={flashMode === 'on'}
+                flash={flashMode}
+            />
+
+            <View style={styles.controls}>
+                <TouchableOpacity style={styles.galleryButton} onPress={openGallary}>
+                    <Ionicons name="images" size={24} color="white" />
+                </TouchableOpacity>
+
+            
+                <TouchableOpacity
+                    style={{ padding: 10 }}
+                    onPress={() => {
+                        setFlashMode((prev) => {
+                            if (prev === 'off') return 'on';
+                            if (prev === 'on') return 'auto';
+                            return 'off';
+                        });
+                    }}
+                >
+                    <Ionicons
+                        name={
+                            flashMode === 'on'
+                            ? 'flash'
+                            : flashMode === 'auto'
+                            ? 'flash-outline'
+                            : 'flash-off'
+                        }
+                        size={24}
+                        color={flashMode === 'auto' ? '#FFD700' : 'white'}
+
+                        />
+
+                        </TouchableOpacity>
+
+                <CaptureButton onPress={takePhoto} />
