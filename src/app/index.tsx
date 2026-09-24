@@ -1,33 +1,43 @@
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-
-export default function HomeScreen(){
+import CameraViewComponent from "@/components/CameraViewComponent";
+import { useCameraPermissions } from 'expo-camera';
+import { Button, StyleSheet, Text, View } from 'react-native';
+export default function Index(){
   const [status,requestPermission]=useCameraPermissions();
   
   if (!status){
-    return <View style={styles.container} />;
+    return( 
+      <View style={styles.container}>
+        <Text>Checking camera permission...</Text>
+      </View>
+      );
   }
 
   if (!status.granted) {
     return(
       <View style={styles.container}>
-        <Pressable onPress={requestPermission}>
-          <Text>Allow Camera</Text>
-        </Pressable>
+        <Text style={styles.text}>
+          Camera permission is required to use the app
+        </Text>
+        <Button title="Grant Permission" onPress={requestPermission}>
+        </Button>
       </View>
     );
   }
 
-  return(
-      <View style={styles.container}>
-        <CameraView style={styles.camera} facing="back"/>
-      </View>
-  );
-  }
+  return <CameraViewComponent />;
+}
 
 const styles=StyleSheet.create({
   container:{
     flex:1,
+    justifyContent:"center",
+    alignItems:"center",
+    padding:20
+  },
+  text:{
+    fontSize: 16,
+    marginBottom: 15,
+    textAlign:"center",
   },
   camera:{
     flex:1,
