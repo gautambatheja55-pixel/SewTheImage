@@ -1,9 +1,37 @@
 import CameraViewComponent from "@/components/CameraViewComponent";
 import { useCameraPermissions } from 'expo-camera';
+import * as Location from "expo-location";
+import { useEffect, useState } from "react";
 import { Button, StyleSheet, Text, View } from 'react-native';
+
 export default function Index(){
   const [status,requestPermission]=useCameraPermissions();
-  
+  const [locationStatus,requestLocationPermission]=Location.useForegroundPermissions();
+  const [latitude,setLatitude] = useState<number | null>(null);
+  const [longitude,setLongitude] = useState<number | null>(null);
+ 
+    const getLocation = async () => {
+    console.log("Get location function ran");
+    if (!locationStatus?.granted){
+      console.log("Location permission not granted");
+      return;
+    }
+    console.log("Getting permission...");
+    const location = await Location.getCurrentPositionAsync({});
+    console.log("Location recieved: ", location)
+    setLatitude(location.coords.latitude);
+    setLongitude(location.coords.longitude);
+
+  };
+ 
+ 
+  useEffect(() => {
+    if (locationStatus?.granted){
+     getLocation();
+    }
+  },[locationStatus]);
+
+
   if (!status){
     return( 
       <View style={styles.container}>
@@ -15,16 +43,21 @@ export default function Index(){
   if (!status.granted) {
     return(
       <View style={styles.container}>
-        <Text style={styles.text}>
-          Camera permission is required to use the app
-        </Text>
-        <Button title="Grant Permission" onPress={requestPermission}>
-        </Button>
-      </View>
+        <Button title="Location"
+        onPress={requestLocationPermission}/>
+        <Button title="Camera"
+        onPress={requestPermission}/>
+      </View> 
     );
   }
+  
+ 
 
-  return <CameraViewComponent />;
+  return (
+  <CameraViewComponent
+  latitude={latitude}
+  longitude={longitude} />);
+ 
 }
 
 const styles=StyleSheet.create({
@@ -33,11 +66,6 @@ const styles=StyleSheet.create({
     justifyContent:"center",
     alignItems:"center",
     padding:20
-  },
-  text:{
-    fontSize: 16,
-    marginBottom: 15,
-    textAlign:"center",
   },
   camera:{
     flex:1,
