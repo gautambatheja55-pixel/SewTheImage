@@ -8,19 +8,26 @@ import {
     Image,
     Modal,
     StyleSheet,
+    Text,
     TouchableOpacity,
     View
 } from "react-native";
 
 const { width, height } = Dimensions.get("screen");
 
-export default function CameraViewComponent() {
+interface CameraViewComponentProps{
+    latitude: number | null;
+    longitude: number | null;
+}
+
+export default function CameraViewComponent({
+    latitude,
+    longitude,
+    }: CameraViewComponentProps) {
     const cameraRef = useRef<CameraView | null>(null);
     const [facing, setFacing] = useState<CameraType>("back");
     const [capturedImages, setCapturedImages] = useState<string[]>([]);
     const [showGallery, setShowGallery] = useState(false);
-    
-    // DEBUGGED: State variable name properly mapped for modes
     const [flashMode, setFlashMode] = useState<'off' | 'on' | 'auto'>('off');
 
     const takePhoto = async () => {
@@ -41,7 +48,6 @@ export default function CameraViewComponent() {
 
     return (
         <View style={styles.container}>
-            {/* DEBUGGED: CameraView parameters fixed with correct state and reference */}
             <CameraView
                 style={styles.camera}
                 facing={facing}
@@ -55,7 +61,6 @@ export default function CameraViewComponent() {
                     <Ionicons name="images" size={24} color="white" />
                 </TouchableOpacity>
 
-                {/* DEBUGGED: OnPress function curly braces and logic syntax fully fixed */}
                 <TouchableOpacity
                     style={{ padding: 10 }}
                     onPress={() => {
@@ -78,6 +83,15 @@ export default function CameraViewComponent() {
                 <TouchableOpacity style={styles.flipButton} onPress={flipCamera}>
                     <Ionicons name="camera-reverse" size={24} color="white" />
                 </TouchableOpacity>
+            </View>
+            <View style={styles.locationBox}>
+                <Text style={styles.locationText}>
+                    Lat: {latitude}
+                </Text>
+                
+                <Text style={styles.locationText}>
+                    Long: {longitude}
+                </Text>
             </View>
 
             <Modal
@@ -136,6 +150,14 @@ const styles = StyleSheet.create({
         justifyContent: "space-around",
         alignItems: "center",
         paddingHorizontal: 20,
+    },
+    locationBox: {
+        position:"absolute",
+        backgroundColor:"rgba(0,0,0,0.5)",
+    },
+    locationText: {
+       color:"white",
+       fontSize:16,
     },
     galleryButton: {
         padding: 10,
