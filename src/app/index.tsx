@@ -9,9 +9,29 @@ export default function Index(){
   const [locationStatus,requestLocationPermission]=Location.useForegroundPermissions();
   const [latitude,setLatitude] = useState<number | null>(null);
   const [longitude,setLongitude] = useState<number | null>(null);
+ 
+    const getLocation = async () => {
+    console.log("Get location function ran");
+    if (!locationStatus?.granted){
+      console.log("Location permission not granted");
+      return;
+    }
+    console.log("Getting permission...");
+    const location = await Location.getCurrentPositionAsync({});
+    console.log("Location recieved: ", location)
+    setLatitude(location.coords.latitude);
+    setLongitude(location.coords.longitude);
+
+  };
+ 
+ 
+  useEffect(() => {
+    if (locationStatus?.granted){
+     getLocation();
+    }
+  },[locationStatus]);
 
 
-  
   if (!status){
     return( 
       <View style={styles.container}>
@@ -31,21 +51,7 @@ export default function Index(){
     );
   }
   
-   const getLocation = async () => {
-    if (!locationStatus?.granted){
-      return;
-    }
-    console.log("Getting permission...");
-    const location = await Location.getCurrentPositionAsync({});
-    console.log("Location recieved: ", location)
-    setLatitude(location.coords.latitude);
-    setLongitude(location.coords.longitude);
-
-     useEffect(() => {
-      if (locationStatus?.granted){
-        getLocation();}
-    },[locationStatus]);
-      }
+ 
 
   return (
   <CameraViewComponent
