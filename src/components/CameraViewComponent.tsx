@@ -1,6 +1,7 @@
 import CaptureButton from "@/components/CaptureButton";
 import { Ionicons } from "@expo/vector-icons";
 import { CameraType, CameraView } from "expo-camera";
+import * as MediaLibrary from 'expo-media-library';
 import { useRef, useState } from "react";
 import {
     Dimensions,
@@ -29,12 +30,42 @@ export default function CameraViewComponent({
     const [capturedImages, setCapturedImages] = useState<string[]>([]);
     const [showGallery, setShowGallery] = useState(false);
     const [flashMode, setFlashMode] = useState<'off' | 'on' | 'auto'>('off');
+    const [photo, setPhoto] = useState<string | null>(null);
+    const [libraryPermission, requestLibraryPermission] = MediaLibrary.usePermissions();
+
+   
 
     const takePhoto = async () => {
-        if (!cameraRef.current) return;
-        const photo = await cameraRef.current.takePictureAsync();
-        setCapturedImages((prev) => [...prev, photo.uri]);
+        if (cameraRef.current) {
+        const options = { quality: 1, skipProcessing: true };
+        const data = await cameraRef.current.takePictureAsync(options);
+        setPhoto(data.uri);
+        setCapturedImages((prev) => [...prev, data.uri]);
+        }
     };
+
+    const savePhoto = async () => {
+        if (!libraryPermission || !libraryPermission.granted) {
+            const permissionResult = await requestLibraryPermission();
+            if (!permissionResult.granted) {
+                alert('Permission to access library is required');
+                return;
+            }
+        }
+
+        if(photo) {
+            try {
+                await MediaLibrary.saveToLibraryAsync(photo);
+                alert('photo saved successfully');
+                setPhoto(null);
+            } catch (error) {
+                console.error(error);
+                alert('Failed to save photo');
+
+            }
+        }
+    };
+
 
     const flipCamera = () => {
         setFacing((prev) => (prev === "back" ? "front" : "back"));
@@ -45,6 +76,25 @@ export default function CameraViewComponent({
             setShowGallery(true);
         }
     };
+
+    if (photo) {
+            return (
+                <View style={{ flex: 1, backgroundColor: '#000' }}>
+                <Image source={{ uri: photo }} style={{ flex: 1, resizeMode: 'contain' }} />
+                <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingBottom: 40 }}>
+                <TouchableOpacity style={[ styles.actionButton, { backgroundColor: '#333'}]} onPress={() => setPhoto(null)}>
+                <Text style={{ color: 'white', fontWeight: 'bold' }}>Retake</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[ styles.actionButton, { backgroundColor: '#007AFF' }]} onPress={savePhoto}>
+                <Text style={{ color: 'white', fontWeight: 'bold' }}>Save to Gallery</Text>
+                </TouchableOpacity>
+                </View>
+                </View>
+            );
+        }
+
+
+
 
     return (
         <View style={styles.container}>
@@ -187,4 +237,10 @@ const styles = StyleSheet.create({
         height: "100%",
         resizeMode: "contain",
     },
+    actionButton: {
+        padding: 15,
+        borderRadius: 8,
+        minWidth: 120,
+        alignItems: 'center'
+    }
 });
