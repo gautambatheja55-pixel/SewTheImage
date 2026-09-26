@@ -1,6 +1,10 @@
 import CaptureButton from "@/components/CaptureButton";
 import { Ionicons } from "@expo/vector-icons";
 import { CameraType, CameraView } from "expo-camera";
+import {
+    Gesture,
+    GestureDetector,
+} from "react-native-gesture-handler";
 import { useRef, useState } from "react";
 import {
     Dimensions,
@@ -12,10 +16,28 @@ import {
     View,
 } from "react-native";
 
-const { width, height } = Dimensions.get("screen");
+const { width, height } =
+    Dimensions.get("screen");
 
-export default function CameraViewComponent() {
-    const cameraRef = useRef<CameraView | null>(null);
+type CameraViewProps = {
+    latitude?: number | null;
+    longitude?: number | null;
+    city?: string;
+    country?: string;
+    time?: string;
+    formattedAddress?: string;
+};
+
+export default function CameraViewComponent({
+    latitude,
+    longitude,
+    city,
+    country,
+    time,
+    formattedAddress,
+}: CameraViewProps) {
+    const cameraRef =
+        useRef<CameraView | null>(null);
 
     const [facing, setFacing] =
         useState<CameraType>("back");
@@ -30,93 +52,41 @@ export default function CameraViewComponent() {
         useState<"off" | "on" | "auto">("off");
 
     const [zoom, setZoom] =
-        useState<number>(0);
+        useState(0);
 
     const [showGrid, setShowGrid] =
-        useState<boolean>(false);
+        useState(false);
 
-    const zoomStart =
-        useRef<number>(0);
+    const zoomAtStart =
+        useRef(0);
 
-    const pinchStartDistance =
-        useRef<number | null>(null);
-
-    const getFingerDistance = (
-        touches: any[]
-    ): number => {
-        if (touches.length < 2) {
-            return 0;
-        }
-
-        const first = touches[0];
-        const second = touches[1];
-
-        const dx =
-            first.pageX - second.pageX;
-
-        const dy =
-            first.pageY - second.pageY;
-
-        return Math.sqrt(
-            dx * dx + dy * dy
+    const clampZoom = (value: number) => {
+        return Math.max(
+            0,
+            Math.min(1, value)
         );
     };
 
-    const handleTouchStart = (
-        event: any
-    ) => {
-        const touches =
-            event.nativeEvent.touches;
-
-        if (touches.length === 2) {
-            pinchStartDistance.current =
-                getFingerDistance(touches);
-
-            zoomStart.current = zoom;
-        }
-    };
-
-    const handleTouchMove = (
-        event: any
-    ) => {
-        const touches =
-            event.nativeEvent.touches;
-
-        if (
-            touches.length === 2 &&
-            pinchStartDistance.current !== null
-        ) {
-            const currentDistance =
-                getFingerDistance(touches);
-
-            const distanceChange =
-                currentDistance -
-                pinchStartDistance.current;
-
+    const pinchGesture = Gesture.Pinch()
+        .onBegin(() => {
+            zoomAtStart.current = zoom;
+        })
+        .onUpdate((event) => {
             const zoomChange =
-                distanceChange / 400;
+                (event.scale - 1) * 0.4;
 
-            const newZoom =
-                zoomStart.current +
-                zoomChange;
+            const nextZoom =
+                clampZoom(
+                    zoomAtStart.current +
+                        zoomChange
+                );
 
-            setZoom(
-                Math.max(
-                    0,
-                    Math.min(1, newZoom)
-                )
-            );
-        }
-    };
-
-    const handleTouchEnd = () => {
-        pinchStartDistance.current = null;
-        zoomStart.current = zoom;
-    };
+            setZoom(nextZoom);
+        });
 
     const resetZoom = () => {
         setZoom(0);
-        zoomStart.current = 0;
+        zoomAtStart.current = 0;
     };
 
     const takePhoto = async () => {
@@ -130,23 +100,25 @@ export default function CameraViewComponent() {
 
             if (photo?.uri) {
                 setCapturedImages(
-                    (prev) => [
-                        ...prev,
+                    (previous) => [
+                        ...previous,
                         photo.uri,
                     ]
                 );
             }
         } catch (error) {
-            console.log(error);
+            console.log(
+                "Photo error:",
+                error
+            );
         }
     };
 
     const flipCamera = () => {
-        setFacing(
-            (prev) =>
-                prev === "back"
-                    ? "front"
-                    : "back"
+        setFacing((previous) =>
+            previous === "back"
+                ? "front"
+                : "back"
         );
 
         resetZoom();
@@ -159,12 +131,12 @@ export default function CameraViewComponent() {
     };
 
     const toggleFlash = () => {
-        setFlashMode((prev) => {
-            if (prev === "off") {
+        setFlashMode((previous) => {
+            if (previous === "off") {
                 return "on";
             }
 
-            if (prev === "on") {
+            if (previous === "on") {
                 return "auto";
             }
 
@@ -174,90 +146,94 @@ export default function CameraViewComponent() {
 
     return (
         <View style={styles.container}>
-            <View
-                style={styles.cameraContainer}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
+            <GestureDetector
+                gesture={pinchGesture}
             >
-                <CameraView
-                    style={styles.camera}
-                    facing={facing}
-                    ref={cameraRef}
-                    zoom={zoom}
-                    enableTorch={
-                        flashMode === "on"
-                    }
-                    flash={flashMode}
-                />
-
-                {showGrid && (
-                    <View
-                        pointerEvents="none"
-                        style={styles.grid}
-                    >
-                        <View
-                            style={[
-                                styles.gridLine,
-                                styles.verticalOne,
-                            ]}
-                        />
-
-                        <View
-                            style={[
-                                styles.gridLine,
-                                styles.verticalTwo,
-                            ]}
-                        />
-
-                        <View
-                            style={[
-                                styles.gridLine,
-                                styles.horizontalOne,
-                            ]}
-                        />
-
-                        <View
-                            style={[
-                                styles.gridLine,
-                                styles.horizontalTwo,
-                            ]}
-                        />
-                    </View>
-                )}
-
-                <View style={styles.topControls}>
-                    <TouchableOpacity
-                        style={[
-                            styles.iconButton,
-                            showGrid &&
-                                styles.activeButton,
-                        ]}
-                        onPress={() =>
-                            setShowGrid(
-                                (prev) => !prev
-                            )
+                <View
+                    style={styles.cameraContainer}
+                >
+                    <CameraView
+                        ref={cameraRef}
+                        style={styles.camera}
+                        facing={facing}
+                        zoom={zoom}
+                        flash={flashMode}
+                        enableTorch={
+                            flashMode === "on"
                         }
-                    >
-                        <Ionicons
-                            name="grid-outline"
-                            size={25}
-                            color="white"
-                        />
-                    </TouchableOpacity>
+                    />
 
-                    <TouchableOpacity
-                        style={styles.iconButton}
-                        onPress={resetZoom}
+                    {showGrid && (
+                        <View
+                            pointerEvents="none"
+                            style={styles.grid}
+                        >
+                            <View
+                                style={[
+                                    styles.gridLine,
+                                    styles.verticalOne,
+                                ]}
+                            />
+
+                            <View
+                                style={[
+                                    styles.gridLine,
+                                    styles.verticalTwo,
+                                ]}
+                            />
+
+                            <View
+                                style={[
+                                    styles.gridLine,
+                                    styles.horizontalOne,
+                                ]}
+                            />
+
+                            <View
+                                style={[
+                                    styles.gridLine,
+                                    styles.horizontalTwo,
+                                ]}
+                            />
+                        </View>
+                    )}
+
+                    <View
+                        style={styles.topControls}
                     >
-                        <Ionicons
-                            name="scan-outline"
-                            size={25}
-                            color="white"
-                        />
-                    </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[
+                                styles.iconButton,
+                                showGrid &&
+                                    styles.activeButton,
+                            ]}
+                            onPress={() =>
+                                setShowGrid(
+                                    (previous) =>
+                                        !previous
+                                )
+                            }
+                        >
+                            <Ionicons
+                                name="grid-outline"
+                                size={25}
+                                color="white"
+                            />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.iconButton}
+                            onPress={resetZoom}
+                        >
+                            <Ionicons
+                                name="scan-outline"
+                                size={25}
+                                color="white"
+                            />
+                        </TouchableOpacity>
+                    </View>
                 </View>
-            </View>
+            </GestureDetector>
 
             <View style={styles.controls}>
                 <TouchableOpacity
@@ -265,8 +241,8 @@ export default function CameraViewComponent() {
                     onPress={openGallery}
                 >
                     <Ionicons
-                        name="images"
-                        size={24}
+                        name="images-outline"
+                        size={25}
                         color="white"
                     />
                 </TouchableOpacity>
@@ -281,7 +257,7 @@ export default function CameraViewComponent() {
                                 ? "flash"
                                 : "flash-off"
                         }
-                        size={24}
+                        size={25}
                         color={
                             flashMode === "auto"
                                 ? "#FFD700"
@@ -299,8 +275,8 @@ export default function CameraViewComponent() {
                     onPress={flipCamera}
                 >
                     <Ionicons
-                        name="camera-reverse"
-                        size={24}
+                        name="camera-reverse-outline"
+                        size={27}
                         color="white"
                     />
                 </TouchableOpacity>
@@ -310,13 +286,15 @@ export default function CameraViewComponent() {
                 visible={showGallery}
                 animationType="slide"
                 presentationStyle="fullScreen"
-                statusBarTranslucent={true}
+                statusBarTranslucent
                 onRequestClose={() =>
                     setShowGallery(false)
                 }
             >
                 <View
-                    style={styles.galleryContainer}
+                    style={
+                        styles.galleryContainer
+                    }
                 >
                     <TouchableOpacity
                         style={styles.closeButton}
@@ -337,14 +315,14 @@ export default function CameraViewComponent() {
                         ].reverse()}
                         horizontal
                         pagingEnabled
+                        showsHorizontalScrollIndicator={
+                            false
+                        }
                         keyExtractor={(
                             item,
                             index
                         ) =>
-                            index.toString()
-                        }
-                        showsHorizontalScrollIndicator={
-                            false
+                            `${item}-${index}`
                         }
                         renderItem={({
                             item,
@@ -362,9 +340,8 @@ export default function CameraViewComponent() {
                                 />
                             </View>
                         )}
-                        initialScrollIndex={0}
                         getItemLayout={(
-                            data,
+                            _data,
                             index
                         ) => ({
                             length: width,
@@ -382,8 +359,6 @@ export default function CameraViewComponent() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        paddingBottom: 30,
-        marginBottom: 30,
         backgroundColor: "black",
     },
 
@@ -401,7 +376,8 @@ const styles = StyleSheet.create({
         left: 20,
         right: 20,
         flexDirection: "row",
-        justifyContent: "space-between",
+        justifyContent:
+            "space-between",
         alignItems: "center",
     },
 
@@ -468,7 +444,8 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         flexDirection: "row",
-        justifyContent: "space-around",
+        justifyContent:
+            "space-around",
         alignItems: "center",
         paddingHorizontal: 20,
     },
@@ -503,4 +480,5 @@ const styles = StyleSheet.create({
         resizeMode: "contain",
     },
 });
+
 
