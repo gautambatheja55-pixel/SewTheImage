@@ -21,6 +21,7 @@ interface CameraViewComponentProps{
     city : string;
     country: string;
     time :string;
+    formattedAddress : string | null;
 }
 
 export default function CameraViewComponent({
@@ -29,6 +30,7 @@ export default function CameraViewComponent({
     city,
     country,
     time,
+    formattedAddress,
     }: CameraViewComponentProps) {
     const cameraRef = useRef<CameraView | null>(null);
     const [facing, setFacing] = useState<CameraType>("back");
@@ -101,6 +103,7 @@ export default function CameraViewComponent({
                 <Text style={styles.locationCity}>{city}</Text>
                 <Text style={styles.locationCountry}>{country}</Text>
                 <Text style={styles.locationTime}>{time}</Text>
+                <Text style={styles.locationAddress}>{formattedAddress}</Text>
             </View>
 
             <Modal
@@ -207,6 +210,9 @@ const styles = StyleSheet.create({
         color:"white"
     },
     locationCountry:{
+        color:"white"
+    },
+    locationAddress:{
         color:"white"
     },
 });

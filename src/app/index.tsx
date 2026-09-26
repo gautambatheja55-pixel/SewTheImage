@@ -12,7 +12,8 @@ export default function Index(){
   const [city,setCity] = useState("");
   const [country,setCountry] = useState("");
   const [time,setCurrentTime] = useState("");
-
+  const [formattedAddress,setFormattedAddress]=useState("");
+  
     const getLocation = async () => {
     if (!locationStatus?.granted){
       console.log("Location permission not granted");
@@ -22,11 +23,15 @@ export default function Index(){
     const location = await Location.getCurrentPositionAsync({});
     const address = await Location.reverseGeocodeAsync({
       latitude: location.coords.latitude,
-      longitude: location.coords.longitude
+      longitude: location.coords.longitude,
     });
+    
+    console.log(address);
+    console.log(location);
     if (address.length > 0){
       setCity(address[0].city ?? "");
       setCountry(address[0].country ?? "");
+      setFormattedAddress(address[0].formattedAddress ?? "");
     }
 
     console.log("Location recieved: ", location)
@@ -83,8 +88,8 @@ export default function Index(){
   longitude={longitude} 
   city={city}
   country={country}
-  time={time}/>);
- 
+  time={time}
+  formattedAddress={formattedAddress}/>);
 }
 
 const styles=StyleSheet.create({
