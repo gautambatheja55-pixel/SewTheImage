@@ -1,43 +1,22 @@
 import CaptureButton from "@/components/CaptureButton";
 import { Ionicons } from "@expo/vector-icons";
 import { CameraType, CameraView } from "expo-camera";
-import {
-    Gesture,
-    GestureDetector,
-} from "react-native-gesture-handler";
 import { useRef, useState } from "react";
 import {
     Dimensions,
     FlatList,
     Image,
     Modal,
+    PanResponder,
     StyleSheet,
     TouchableOpacity,
     View,
 } from "react-native";
 
-const { width, height } =
-    Dimensions.get("screen");
+const { width, height } = Dimensions.get("screen");
 
-type CameraViewProps = {
-    latitude?: number | null;
-    longitude?: number | null;
-    city?: string;
-    country?: string;
-    time?: string;
-    formattedAddress?: string;
-};
-
-export default function CameraViewComponent({
-    latitude,
-    longitude,
-    city,
-    country,
-    time,
-    formattedAddress,
-}: CameraViewProps) {
-    const cameraRef =
-        useRef<CameraView | null>(null);
+export default function CameraViewComponent() {
+    const cameraRef = useRef<CameraView | null>(null);
 
     const [facing, setFacing] =
         useState<CameraType>("back");
@@ -57,37 +36,124 @@ export default function CameraViewComponent({
     const [showGrid, setShowGrid] =
         useState(false);
 
-    const zoomAtStart =
-        useRef(0);
+    const zoomStart = useRef(0);
 
-    const clampZoom = (value: number) => {
-        return Math.max(
-            0,
-            Math.min(1, value)
+    const pinchStartDistance = useRef(0);
+
+    const getDistance = (touches: any[]) => {
+        if (touches.length < 2) {
+            return 0;
+        }
+
+        const x =
+            touches[0].pageX -
+            touches[1].pageX;
+
+        const y =
+            touches[0].pageY -
+            touches[1].pageY;
+
+        return Math.sqrt(
+            x * x + y * y
         );
     };
 
-    const pinchGesture = Gesture.Pinch()
-        .onBegin(() => {
-            zoomAtStart.current = zoom;
-        })
-        .onUpdate((event) => {
-            const zoomChange =
-                (event.scale - 1) * 0.4;
+    const panResponder =
+        useRef(
+            PanResponder.create({
+                onStartShouldSetPanResponder: (
+                    event
+                ) => {
+                    return (
+                        event.nativeEvent
+                            .touches.length >= 2
+                    );
+                },
 
-            const nextZoom =
-                clampZoom(
-                    zoomAtStart.current +
-                        zoomChange
-                );
+                onMoveShouldSetPanResponder: (
+                    event
+                ) => {
+                    return (
+                        event.nativeEvent
+                            .touches.length >= 2
+                    );
+                },
 
-            setZoom(nextZoom);
-        });
+                onPanResponderGrant: (
+                    event
+                ) => {
+                    const touches =
+                        event.nativeEvent
+                            .touches;
 
-    const resetZoom = () => {
-        setZoom(0);
-        zoomAtStart.current = 0;
-    };
+                    if (touches.length >= 2) {
+                        pinchStartDistance.current =
+                            getDistance(
+                                touches
+                            );
+
+                        zoomStart.current =
+                            zoom;
+                    }
+                },
+
+                onPanResponderMove: (
+                    event
+                ) => {
+                    const touches =
+                        event.nativeEvent
+                            .touches;
+
+                    if (touches.length < 2) {
+                        return;
+                    }
+
+                    const currentDistance =
+                        getDistance(
+                            touches
+                        );
+
+                    if (
+                        pinchStartDistance.current ===
+                        0
+                    ) {
+                        return;
+                    }
+
+                    const scale =
+                        currentDistance /
+                        pinchStartDistance.current;
+
+                    const change =
+                        (scale - 1) * 0.5;
+
+                    const newZoom =
+                        zoomStart.current +
+                        change;
+
+                    const limitedZoom =
+                        Math.max(
+                            0,
+                            Math.min(
+                                1,
+                                newZoom
+                            )
+                        );
+
+                    setZoom(
+                        limitedZoom
+                    );
+                },
+
+                onPanResponderRelease: () => {
+                    pinchStartDistance.current = 0;
+                },
+
+                onPanResponderTerminate: () => {
+                    pinchStartDistance.current = 0;
+                },
+            })
+        ).current;
 
     const takePhoto = async () => {
         if (!cameraRef.current) {
@@ -108,7 +174,7 @@ export default function CameraViewComponent({
             }
         } catch (error) {
             console.log(
-                "Photo error:",
+                "Camera error:",
                 error
             );
         }
@@ -121,13 +187,8 @@ export default function CameraViewComponent({
                 : "back"
         );
 
-        resetZoom();
-    };
-
-    const openGallery = () => {
-        if (capturedImages.length > 0) {
-            setShowGallery(true);
-        }
+        setZoom(0);
+        zoomStart.current = 0;
     };
 
     const toggleFlash = () => {
@@ -144,96 +205,122 @@ export default function CameraViewComponent({
         });
     };
 
+    const openGallery = () => {
+        if (capturedImages.length > 0) {
+            setShowGallery(true);
+        }
+    };
+
+    const resetZoom = () => {
+        setZoom(0);
+        zoomStart.current = 0;
+    };
+
     return (
         <View style={styles.container}>
-            <GestureDetector
-                gesture={pinchGesture}
+            <View
+                style={styles.cameraContainer}
+                {...panResponder.panHandlers}
             >
-                <View
-                    style={styles.cameraContainer}
-                >
-                    <CameraView
-                        ref={cameraRef}
-                        style={styles.camera}
-                        facing={facing}
-                        zoom={zoom}
-                        flash={flashMode}
-                        enableTorch={
-                            flashMode === "on"
-                        }
-                    />
+                <CameraView
+                    ref={cameraRef}
+                    style={styles.camera}
+                    facing={facing}
+                    zoom={zoom}
+                    flash={flashMode}
+                    enableTorch={
+                        flashMode === "on"
+                    }
+                />
 
-                    {showGrid && (
-                        <View
-                            pointerEvents="none"
-                            style={styles.grid}
-                        >
-                            <View
-                                style={[
-                                    styles.gridLine,
-                                    styles.verticalOne,
-                                ]}
-                            />
-
-                            <View
-                                style={[
-                                    styles.gridLine,
-                                    styles.verticalTwo,
-                                ]}
-                            />
-
-                            <View
-                                style={[
-                                    styles.gridLine,
-                                    styles.horizontalOne,
-                                ]}
-                            />
-
-                            <View
-                                style={[
-                                    styles.gridLine,
-                                    styles.horizontalTwo,
-                                ]}
-                            />
-                        </View>
-                    )}
-
+                {showGrid && (
                     <View
-                        style={styles.topControls}
+                        pointerEvents="none"
+                        style={styles.grid}
                     >
-                        <TouchableOpacity
+                        <View
                             style={[
-                                styles.iconButton,
-                                showGrid &&
-                                    styles.activeButton,
+                                styles.gridLine,
+                                styles.verticalOne,
                             ]}
-                            onPress={() =>
-                                setShowGrid(
-                                    (previous) =>
-                                        !previous
-                                )
+                        />
+
+                        <View
+                            style={[
+                                styles.gridLine,
+                                styles.verticalTwo,
+                            ]}
+                        />
+
+                        <View
+                            style={[
+                                styles.gridLine,
+                                styles.horizontalOne,
+                            ]}
+                        />
+
+                        <View
+                            style={[
+                                styles.gridLine,
+                                styles.horizontalTwo,
+                            ]}
+                        />
+                    </View>
+                )}
+
+                <View
+                    style={styles.topControls}
+                >
+                    <TouchableOpacity
+                        style={[
+                            styles.topButton,
+                            showGrid &&
+                                styles.activeButton,
+                        ]}
+                        onPress={() =>
+                            setShowGrid(
+                                (previous) =>
+                                    !previous
+                            )
+                        }
+                    >
+                        <Ionicons
+                            name="grid-outline"
+                            size={25}
+                            color="white"
+                        />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.zoomButton}
+                        onPress={resetZoom}
+                    >
+                        <Ionicons
+                            name="scan-outline"
+                            size={25}
+                            color="white"
+                        />
+
+                        <View
+                            style={
+                                styles.zoomTextContainer
                             }
                         >
                             <Ionicons
-                                name="grid-outline"
-                                size={25}
+                                name="search"
+                                size={12}
                                 color="white"
                             />
-                        </TouchableOpacity>
 
-                        <TouchableOpacity
-                            style={styles.iconButton}
-                            onPress={resetZoom}
-                        >
-                            <Ionicons
-                                name="scan-outline"
-                                size={25}
-                                color="white"
+                            <View
+                                style={
+                                    styles.zoomValue
+                                }
                             />
-                        </TouchableOpacity>
-                    </View>
+                        </View>
+                    </TouchableOpacity>
                 </View>
-            </GestureDetector>
+            </View>
 
             <View style={styles.controls}>
                 <TouchableOpacity
@@ -241,8 +328,8 @@ export default function CameraViewComponent({
                     onPress={openGallery}
                 >
                     <Ionicons
-                        name="images-outline"
-                        size={25}
+                        name="images"
+                        size={24}
                         color="white"
                     />
                 </TouchableOpacity>
@@ -257,7 +344,7 @@ export default function CameraViewComponent({
                                 ? "flash"
                                 : "flash-off"
                         }
-                        size={25}
+                        size={24}
                         color={
                             flashMode === "auto"
                                 ? "#FFD700"
@@ -275,8 +362,8 @@ export default function CameraViewComponent({
                     onPress={flipCamera}
                 >
                     <Ionicons
-                        name="camera-reverse-outline"
-                        size={27}
+                        name="camera-reverse"
+                        size={24}
                         color="white"
                     />
                 </TouchableOpacity>
@@ -315,14 +402,14 @@ export default function CameraViewComponent({
                         ].reverse()}
                         horizontal
                         pagingEnabled
-                        showsHorizontalScrollIndicator={
-                            false
-                        }
                         keyExtractor={(
                             item,
                             index
                         ) =>
                             `${item}-${index}`
+                        }
+                        showsHorizontalScrollIndicator={
+                            false
                         }
                         renderItem={({
                             item,
@@ -340,15 +427,6 @@ export default function CameraViewComponent({
                                 />
                             </View>
                         )}
-                        getItemLayout={(
-                            _data,
-                            index
-                        ) => ({
-                            length: width,
-                            offset:
-                                width * index,
-                            index,
-                        })}
                     />
                 </View>
             </Modal>
@@ -381,14 +459,36 @@ const styles = StyleSheet.create({
         alignItems: "center",
     },
 
-    iconButton: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
+    topButton: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
         backgroundColor:
             "rgba(0,0,0,0.55)",
         justifyContent: "center",
         alignItems: "center",
+    },
+
+    zoomButton: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor:
+            "rgba(0,0,0,0.55)",
+        justifyContent: "center",
+        alignItems: "center",
+    },
+
+    zoomTextContainer: {
+        position: "absolute",
+        bottom: 7,
+        flexDirection: "row",
+        alignItems: "center",
+    },
+
+    zoomValue: {
+        width: 0,
+        height: 0,
     },
 
     activeButton: {
@@ -407,7 +507,7 @@ const styles = StyleSheet.create({
     gridLine: {
         position: "absolute",
         backgroundColor:
-            "rgba(255,255,255,0.55)",
+            "rgba(255,255,255,0.6)",
     },
 
     verticalOne: {
@@ -480,5 +580,4 @@ const styles = StyleSheet.create({
         resizeMode: "contain",
     },
 });
-
 
