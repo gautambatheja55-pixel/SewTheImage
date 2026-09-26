@@ -9,15 +9,26 @@ export default function Index(){
   const [locationStatus,requestLocationPermission]=Location.useForegroundPermissions();
   const [latitude,setLatitude] = useState<number | null>(null);
   const [longitude,setLongitude] = useState<number | null>(null);
- 
+  const [city,setCity] = useState("");
+  const [country,setCountry] = useState("");
+  const [time,setCurrentTime] = useState("");
+
     const getLocation = async () => {
-    console.log("Get location function ran");
     if (!locationStatus?.granted){
       console.log("Location permission not granted");
       return;
     }
-    console.log("Getting permission...");
+
     const location = await Location.getCurrentPositionAsync({});
+    const address = await Location.reverseGeocodeAsync({
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude
+    });
+    if (address.length > 0){
+      setCity(address[0].city ?? "");
+      setCountry(address[0].country ?? "");
+    }
+
     console.log("Location recieved: ", location)
     setLatitude(location.coords.latitude);
     setLongitude(location.coords.longitude);
@@ -31,6 +42,19 @@ export default function Index(){
     }
   },[locationStatus]);
 
+  useEffect(()=>{
+    const interval=setInterval(() => {
+      const now = new Date();
+      setCurrentTime(
+        now.toLocaleTimeString([],{
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      );
+    },1000);
+
+    return () => clearInterval(interval);
+  },[]);
 
   if (!status){
     return( 
@@ -56,7 +80,10 @@ export default function Index(){
   return (
   <CameraViewComponent
   latitude={latitude}
-  longitude={longitude} />);
+  longitude={longitude} 
+  city={city}
+  country={country}
+  time={time}/>);
  
 }
 

@@ -18,11 +18,17 @@ const { width, height } = Dimensions.get("screen");
 interface CameraViewComponentProps{
     latitude: number | null;
     longitude: number | null;
+    city : string;
+    country: string;
+    time :string;
 }
 
 export default function CameraViewComponent({
     latitude,
     longitude,
+    city,
+    country,
+    time,
     }: CameraViewComponentProps) {
     const cameraRef = useRef<CameraView | null>(null);
     const [facing, setFacing] = useState<CameraType>("back");
@@ -92,6 +98,9 @@ export default function CameraViewComponent({
                 <Text style={styles.locationText}>
                     Long: {longitude}
                 </Text>
+                <Text style={styles.locationCity}>{city}</Text>
+                <Text style={styles.locationCountry}>{country}</Text>
+                <Text style={styles.locationTime}>{time}</Text>
             </View>
 
             <Modal
@@ -154,10 +163,17 @@ const styles = StyleSheet.create({
     locationBox: {
         position:"absolute",
         backgroundColor:"rgba(0,0,0,0.5)",
+        bottom:"20%",
+        padding:10,
+        borderRadius:10,
+        alignSelf:"center"
     },
     locationText: {
        color:"white",
        fontSize:16,
+    },
+    locationTime:{
+        color:"white",
     },
     galleryButton: {
         padding: 10,
@@ -186,5 +202,11 @@ const styles = StyleSheet.create({
         width: "100%",
         height: "100%",
         resizeMode: "contain",
+    },
+    locationCity:{
+        color:"white"
+    },
+    locationCountry:{
+        color:"white"
     },
 });
