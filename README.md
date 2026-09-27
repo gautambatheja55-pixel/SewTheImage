@@ -20,7 +20,7 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
 <h1>App Function: </h1><br>
 SewTheImage allows you to add (sew) the location and time directly into your photos<br>
 ![alt text](<Screenshot 2026-09-27 224135.png>)
-<img src=".../Screenshot 2026-09-27 224135.png">
+![SewTheImage Screenshot](./Screenshot%202026-09-27%20224135.png)
 It has:
 <ol>
    <li>Latitude display</li>
@@ -35,31 +35,37 @@ It has:
    <li>Grid</li>
    <li>Gallery to show the photos clicked</li>
 </ol>
-
+<br>
 <h1>Project Status</h1><br>
 The project is currently incomplete and our final version would include:
-Different UI formats for displaying data
-Maps satellite view of your location
-Recording
-Improved UI of Camera 
-More features in the App Gallery
-Weather Information of the Location
-Landscape/Horizontal Responsiveness
-
+<ol>
+   <li>Different UI formats for displaying data</li>
+   <li>Maps satellite view of your location</li>
+   <li>Recording</li>
+   <li>Improved UI of Camera </li>
+   <li> More features in the App Gallery</li>
+   <li>Weather Information of the Location</li>
+   <li>Landscape/Horizontal Responsiveness</li>
+</ol>
+<br>
 <h1>Tech Stack</h1>
-React Native
-Expo 
-TypeScript
-Expo Camera
-Expo location
-Expo media Gallery
-React Native View Shot
-Ionicons
-
+<ol>
+   <li>React Native</li>
+   <li> Expo </li>
+   <li>TypeScript</li>
+   <li> Expo Camera</li>
+   <li>Expo location</li>
+   <li>Expo media Gallery</li>
+   <li>React Native View Shot</li>
+   <li>Ionicons</li>
+</ol>
+<br>
 <h1>Requirements: </h1>
-Node.js
-npm
-expo
+<ol>
+   <li>Node.js</li>
+   <li>npm</li>
+   <li>expo</li>
+</ol>
 
 <h1>Permissions: camera & location </h1>
 
