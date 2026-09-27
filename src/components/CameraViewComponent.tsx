@@ -468,7 +468,7 @@ export default function CameraViewComponent({
 
           <View style={styles.previewTop}>
 
-            {/* SHORTENED X/CLOSE */}
+        
 
             <TouchableOpacity
               style={styles.previewButton}
