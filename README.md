@@ -16,6 +16,7 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    ```bash
    npx expo start
    ```
+<h2>IMP: Give permission of location first and then camera bcz for now if given permission of camera first it will open the camera without showing you location</h2><br>
 
 <h1>App Function: </h1><br>
 SewTheImage allows you to add (sew) the location and time directly into your photos<br>
