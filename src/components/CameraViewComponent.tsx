@@ -1,1251 +1,852 @@
 import CaptureButton from "./CaptureButton";
-
 import { Ionicons } from "@expo/vector-icons";
-
+import { CameraType, CameraView } from "expo-camera";
+import { useRef, useState } from "react";
 import {
-    CameraType,
-    CameraView,
-} from "expo-camera";
-
-import {
-    useRef,
-    useState,
-} from "react";
-
-import {
-    Dimensions,
-    FlatList,
-    Image,
-    Modal,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Dimensions,
+  FlatList,
+  Image,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
-const { width, height } =
-    Dimensions.get("screen");
+const { width, height } = Dimensions.get("screen");
 
 interface CameraViewComponentProps {
-    latitude: number | null;
-    longitude: number | null;
-    city: string;
-    country: string;
-    time: string;
-    formattedAddress: string | null;
-    onClose?: () => void;
+  latitude: number | null;
+  longitude: number | null;
+  city: string;
+  country: string;
+  time: string;
+  formattedAddress: string | null;
+  onClose?: () => void;
 }
 
 export default function CameraViewComponent({
-    latitude,
-    longitude,
-    city,
-    country,
-    time,
-    formattedAddress,
-    onClose = () => {},
+  latitude,
+  longitude,
+  city,
+  country,
+  time,
+  formattedAddress,
+  onClose = () => {},
 }: CameraViewComponentProps) {
+  const cameraRef = useRef<CameraView | null>(null);
 
-    const cameraRef =
-        useRef<CameraView | null>(null);
+  const [facing, setFacing] = useState<CameraType>("back");
+  const [capturedImages, setCapturedImages] = useState<string[]>([]);
+  const [showGallery, setShowGallery] = useState(false);
+  const [flashMode, setFlashMode] =
+    useState<"off" | "on" | "auto">("off");
 
-    const compositionRef =
-        useRef<View | null>(null);
+  const [showGrid, setShowGrid] = useState(true);
+  const [zoom, setZoom] = useState(0);
+  const [showPreview, setShowPreview] = useState(false);
+  const [isCameraReady, setIsCameraReady] = useState(false);
+  const [isTakingPhoto, setIsTakingPhoto] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  
-
-    const [facing, setFacing] =
-        useState<CameraType>("back");
-
-    const [capturedImages, setCapturedImages] =
-        useState<string[]>([]);
-
-    const [showGallery, setShowGallery] =
-        useState(false);
-
-    const [flashMode, setFlashMode] =
-        useState<"off" | "on" | "auto">(
-            "off"
-        );
-
-    const [showGrid, setShowGrid] =
-        useState(true);
-
-    const [zoom, setZoom] =
-        useState(0);
-
-    const [showPreview, setShowPreview] =
-        useState(false);
-
-    const [isCameraReady, setIsCameraReady] =
-        useState(false);
-
-    const [isTakingPhoto, setIsTakingPhoto] =
-        useState(false);
-
-    const [isSaving, setIsSaving] =
-        useState(false);
-
-    const latestImage =
-        capturedImages.length > 0
-            ? capturedImages[
-                  capturedImages.length - 1
-              ]
-            : null;
+  const latestImage =
+    capturedImages.length > 0
+      ? capturedImages[capturedImages.length - 1]
+      : null;
 
  
 
-    const takePhoto = async () => {
-        try {
-            if (isTakingPhoto) {
-                return;
-            }
-
-            if (!isCameraReady) {
-                console.log(
-                    "Camera is not ready yet"
-                );
-                return;
-            }
-
-            if (!cameraRef.current) {
-                console.log(
-                    "Camera ref is null"
-                );
-                return;
-            }
-
-            if (
-                typeof cameraRef.current
-                    .takePictureAsync !==
-                "function"
-            ) {
-                console.log(
-                    "takePictureAsync is unavailable"
-                );
-                return;
-            }
-
-            setIsTakingPhoto(true);
-
-            const photo =
-                await cameraRef.current.takePictureAsync(
-                    {
-                        quality: 1,
-                    }
-                );
-
-            if (!photo?.uri) {
-                console.log(
-                    "No photo URI received"
-                );
-                return;
-            }
-
-            console.log(
-                "Photo taken:",
-                photo.uri
-            );
-
-            setCapturedImages((prev) => [
-                ...prev,
-                photo.uri,
-            ]);
-
-            setShowPreview(true);
-        } catch (error) {
-            console.error(
-                "Error taking photo:",
-                error
-            );
-        } finally {
-            setIsTakingPhoto(false);
-        }
-    };
-
-  
-
-    const retakePhoto = () => {
-        setCapturedImages((prev) =>
-            prev.slice(0, -1)
-        );
-
-        setShowPreview(false);
-    };
-
-  
-
-const closeCamera = () => {
-    setShowPreview(false);
-
-    if (typeof onClose === "function") {
-        onClose();
+  const takePhoto = async () => {
+    if (
+      !isCameraReady ||
+      !cameraRef.current ||
+      isTakingPhoto
+    ) {
+      return;
     }
-};
+
+    try {
+      setIsTakingPhoto(true);
+
+      const photo =
+        await cameraRef.current.takePictureAsync({
+          quality: 1,
+        });
+
+      if (!photo?.uri) return;
+
+      setCapturedImages((prev) => [
+        ...prev,
+        photo.uri,
+      ]);
+
+      setShowPreview(true);
+    } catch (error) {
+      console.error("Error taking photo:", error);
+    } finally {
+      setIsTakingPhoto(false);
+    }
+  };
 
   
 
-    const saveComposedImage = async () => {
-        try {
-            if (isSaving) {
-                return;
-            }
+  const retakePhoto = () => {
+    setCapturedImages((prev) =>
+      prev.slice(0, -1)
+    );
 
-            if (!latestImage) {
-                console.log(
-                    "No captured image to save"
-                );
-                return;
-            }
+    setShowPreview(false);
+  };
 
-            setIsSaving(true);
 
-            const finalImageUri = latestImage;
+  const saveComposedImage = async () => {
+    if (!latestImage || isSaving) return;
 
-            console.log(
-                "Final image:",
-                finalImageUri
-            );
+    try {
+      setIsSaving(true);
 
-            console.log(
-                "Composed image captured:",
-                finalImageUri
-            );
+      console.log(
+        "Saved image:",
+        latestImage
+      );
 
-            setShowPreview(false);
+      setShowPreview(false);
 
-            onClose();
-        } catch (error) {
-            console.error(
-                "Error saving composed image:",
-                error
-            );
-        } finally {
-            setIsSaving(false);
-        }
-    };
+      onClose?.();
+    } catch (error) {
+      console.error(
+        "Error saving image:",
+        error
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
-   
 
-    const flipCamera = () => {
-        setFacing((prev) =>
-            prev === "back"
-                ? "front"
-                : "back"
-        );
 
-        setIsCameraReady(false);
-    };
+  const flipCamera = () => {
+    setFacing((current) =>
+      current === "back"
+        ? "front"
+        : "back"
+    );
 
- 
+    setIsCameraReady(false);
+  };
 
-    const openGallery = () => {
-        if (capturedImages.length > 0) {
-            setShowGallery(true);
-        }
-    };
+
+
+  const toggleFlash = () => {
+    setFlashMode((current) => {
+      if (current === "off") return "on";
+      if (current === "on") return "auto";
+
+      return "off";
+    });
+  };
 
  
 
-    const toggleFlash = () => {
-        setFlashMode((prev) => {
-            if (prev === "off") {
-                return "on";
-            }
+  const zoomIn = () =>
+    setZoom((current) =>
+      Math.min(1, current + 0.1)
+    );
 
-            if (prev === "on") {
-                return "auto";
-            }
+  const zoomOut = () =>
+    setZoom((current) =>
+      Math.max(0, current - 0.1)
+    );
 
-            return "off";
-        });
-    };
+  const resetZoom = () =>
+    setZoom(0);
 
+  const zoomDisplay =
+    zoom === 0
+      ? "1×"
+      : `${(1 + zoom * 4).toFixed(1)}×`;
 
+  return (
+    <View style={styles.container}>
 
-    const zoomIn = () => {
-        setZoom((prev) =>
-            Math.min(1, prev + 0.1)
-        );
-    };
-
-    const zoomOut = () => {
-        setZoom((prev) =>
-            Math.max(0, prev - 0.1)
-        );
-    };
-
-    const resetZoom = () => {
-        setZoom(0);
-    };
-
-    const zoomDisplay =
-        zoom === 0
-            ? "1×"
-            : `${(
-                  1 +
-                  zoom * 4
-              ).toFixed(1)}×`;
-
-    return (
-        <View style={styles.container}>
    
 
-            {!showPreview && (
-                <CameraView
-                    ref={cameraRef}
-                    style={styles.camera}
-                    facing={facing}
-                    zoom={zoom}
-                    enableTorch={
-                        flashMode === "on"
-                    }
-                    onCameraReady={() => {
-                        console.log(
-                            "Camera ready"
-                        );
+      {!showPreview && (
+        <CameraView
+          ref={cameraRef}
+          style={styles.camera}
+          facing={facing}
+          zoom={zoom}
+          enableTorch={flashMode === "on"}
+          onCameraReady={() =>
+            setIsCameraReady(true)
+          }
+          onMountError={(error) => {
+            console.log(
+              "Camera error:",
+              error
+            );
 
-                        setIsCameraReady(
-                            true
-                        );
-                    }}
-                    onMountError={(
-                        error
-                    ) => {
-                        console.log(
-                            "Camera mount error:",
-                            error
-                        );
+            setIsCameraReady(false);
+          }}
+        />
+      )}
 
-                        setIsCameraReady(
-                            false
-                        );
-                    }}
-                />
+   
+
+      {showGrid && !showPreview && (
+        <View
+          pointerEvents="none"
+          style={styles.gridContainer}
+        >
+          <View
+            style={[
+              styles.gridVertical,
+              { left: "33.33%" },
+            ]}
+          />
+
+          <View
+            style={[
+              styles.gridVertical,
+              { left: "66.66%" },
+            ]}
+          />
+
+          <View
+            style={[
+              styles.gridHorizontal,
+              { top: "33.33%" },
+            ]}
+          />
+
+          <View
+            style={[
+              styles.gridHorizontal,
+              { top: "66.66%" },
+            ]}
+          />
+        </View>
+      )}
+
+
+
+      {!showPreview && (
+        <View style={styles.topControls}>
+
+      
+
+          <TouchableOpacity
+            style={styles.roundButton}
+            onPress={() => {
+              setShowPreview(false);
+              onClose?.();
+            }}
+          >
+            <Ionicons
+              name="close"
+              size={27}
+              color="white"
+            />
+          </TouchableOpacity>
+
+         
+          <TouchableOpacity
+            style={styles.roundButton}
+            onPress={() =>
+              setShowGrid(
+                (current) => !current
+              )
+            }
+          >
+            <Ionicons
+              name="grid-outline"
+              size={23}
+              color={
+                showGrid
+                  ? "#FFD700"
+                  : "white"
+              }
+            />
+          </TouchableOpacity>
+
+        </View>
+      )}
+
+
+
+      {!showPreview && (
+        <View style={styles.zoomContainer}>
+
+          <TouchableOpacity
+            style={styles.zoomButton}
+            onPress={zoomOut}
+          >
+            <Ionicons
+              name="remove"
+              size={22}
+              color="white"
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.zoomTextButton}
+            onPress={resetZoom}
+          >
+            <Text style={styles.zoomText}>
+              {zoomDisplay}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.zoomButton}
+            onPress={zoomIn}
+          >
+            <Ionicons
+              name="add"
+              size={22}
+              color="white"
+            />
+          </TouchableOpacity>
+
+        </View>
+      )}
+
+   
+
+      {!showPreview && (
+        <View style={styles.locationBox}>
+
+          <Text style={styles.locationText}>
+            Lat: {latitude ?? "N/A"}
+          </Text>
+
+          <Text style={styles.locationText}>
+            Long: {longitude ?? "N/A"}
+          </Text>
+
+          {!!city && (
+            <Text style={styles.locationCity}>
+              {city}
+            </Text>
+          )}
+
+          {!!country && (
+            <Text style={styles.locationText}>
+              {country}
+            </Text>
+          )}
+
+          {!!time && (
+            <Text style={styles.locationText}>
+              {time}
+            </Text>
+          )}
+
+          {!!formattedAddress && (
+            <Text style={styles.locationText}>
+              {formattedAddress}
+            </Text>
+          )}
+
+        </View>
+      )}
+
+      
+
+      {!showPreview && (
+        <View style={styles.controls}>
+
+         
+
+          <TouchableOpacity
+            style={styles.controlButton}
+            onPress={() =>
+              capturedImages.length > 0 &&
+              setShowGallery(true)
+            }
+          >
+            <Ionicons
+              name="images"
+              size={27}
+              color="white"
+            />
+          </TouchableOpacity>
+
+      
+
+          <TouchableOpacity
+            style={styles.controlButton}
+            onPress={toggleFlash}
+          >
+            <Ionicons
+              name={
+                flashMode === "on"
+                  ? "flash"
+                  : flashMode === "auto"
+                  ? "flash-outline"
+                  : "flash-off"
+              }
+              size={27}
+              color={
+                flashMode === "auto"
+                  ? "#FFD700"
+                  : "white"
+              }
+            />
+          </TouchableOpacity>
+
+  
+
+          <CaptureButton
+            onPress={takePhoto}
+          />
+
+   
+
+          <TouchableOpacity
+            style={styles.controlButton}
+            onPress={flipCamera}
+          >
+            <Ionicons
+              name="camera-reverse"
+              size={29}
+              color="white"
+            />
+          </TouchableOpacity>
+
+        </View>
+      )}
+
+    
+
+      {showPreview && latestImage && (
+        <View style={styles.preview}>
+
+          <Image
+            source={{
+              uri: latestImage,
+            }}
+            style={styles.previewImage}
+          />
+
+         
+
+          <View style={styles.photoInfo}>
+
+            {!!city && (
+              <Text style={styles.photoTitle}>
+                {city}
+                {country
+                  ? `, ${country}`
+                  : ""}
+              </Text>
             )}
 
+            {latitude !== null &&
+              longitude !== null && (
+                <Text style={styles.photoText}>
+                  {latitude}, {longitude}
+                </Text>
+              )}
 
-            {showGrid &&
-                !showPreview && (
-                    <View
-                        pointerEvents="none"
-                        style={
-                            styles.gridContainer
-                        }
-                    >
-                        <View
-                            style={[
-                                styles.gridVerticalLine,
-                                {
-                                    left: "33.33%",
-                                },
-                            ]}
-                        />
-
-                        <View
-                            style={[
-                                styles.gridVerticalLine,
-                                {
-                                    left: "66.66%",
-                                },
-                            ]}
-                        />
-
-                        <View
-                            style={[
-                                styles.gridHorizontalLine,
-                                {
-                                    top: "33.33%",
-                                },
-                            ]}
-                        />
-
-                        <View
-                            style={[
-                                styles.gridHorizontalLine,
-                                {
-                                    top: "66.66%",
-                                },
-                            ]}
-                        />
-                    </View>
-                )}
-
-        
-
-            {!showPreview && (
-                <View
-                    style={
-                        styles.topControls
-                    }
-                >
-               
-
-                    <TouchableOpacity
-                        style={
-                            styles.roundButton
-                        }
-                        onPress={closeCamera}
-                    >
-                        <Ionicons
-                            name="close"
-                            size={27}
-                            color="white"
-                        />
-                    </TouchableOpacity>
-
-        
-
-                    <TouchableOpacity
-                        style={
-                            styles.roundButton
-                        }
-                        onPress={() =>
-                            setShowGrid(
-                                (prev) =>
-                                    !prev
-                            )
-                        }
-                    >
-                        <Ionicons
-                            name="grid-outline"
-                            size={23}
-                            color={
-                                showGrid
-                                    ? "#FFD700"
-                                    : "white"
-                            }
-                        />
-                    </TouchableOpacity>
-                </View>
+            {!!time && (
+              <Text style={styles.photoText}>
+                {time}
+              </Text>
             )}
+
+            {!!formattedAddress && (
+              <Text style={styles.photoText}>
+                {formattedAddress}
+              </Text>
+            )}
+
+          </View>
+
+          
+
+          <View style={styles.previewTop}>
+
+            {/* SHORTENED X/CLOSE */}
+
+            <TouchableOpacity
+              style={styles.previewButton}
+              onPress={() => {
+                setShowPreview(false);
+                onClose?.();
+              }}
+            >
+              <Ionicons
+                name="close"
+                size={25}
+                color="white"
+              />
+
+              <Text style={styles.buttonText}>
+                Close
+              </Text>
+            </TouchableOpacity>
 
        
 
-            {!showPreview && (
-                <View
-                    style={
-                        styles.zoomContainer
-                    }
-                >
-                    <TouchableOpacity
-                        style={
-                            styles.zoomButton
-                        }
-                        onPress={zoomOut}
-                    >
-                        <Ionicons
-                            name="remove"
-                            size={22}
-                            color="white"
-                        />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        style={
-                            styles.zoomTextContainer
-                        }
-                        onPress={resetZoom}
-                    >
-                        <Text
-                            style={
-                                styles.zoomText
-                            }
-                        >
-                            {zoomDisplay}
-                        </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        style={
-                            styles.zoomButton
-                        }
-                        onPress={zoomIn}
-                    >
-                        <Ionicons
-                            name="add"
-                            size={22}
-                            color="white"
-                        />
-                    </TouchableOpacity>
-                </View>
-            )}
-
-  
-
-            {!showPreview && (
-                <View
-                    style={
-                        styles.locationBox
-                    }
-                >
-                    <Text
-                        style={
-                            styles.locationText
-                        }
-                    >
-                        Lat:{" "}
-                        {latitude ??
-                            "N/A"}
-                    </Text>
-
-                    <Text
-                        style={
-                            styles.locationText
-                        }
-                    >
-                        Long:{" "}
-                        {longitude ??
-                            "N/A"}
-                    </Text>
-
-                    {!!city && (
-                        <Text
-                            style={
-                                styles.locationCity
-                            }
-                        >
-                            {city}
-                        </Text>
-                    )}
-
-                    {!!country && (
-                        <Text
-                            style={
-                                styles.locationCountry
-                            }
-                        >
-                            {country}
-                        </Text>
-                    )}
-
-                    {!!time && (
-                        <Text
-                            style={
-                                styles.locationTime
-                            }
-                        >
-                            {time}
-                        </Text>
-                    )}
-
-                    {!!formattedAddress && (
-                        <Text
-                            style={
-                                styles.locationAddress
-                            }
-                        >
-                            {
-                                formattedAddress
-                            }
-                        </Text>
-                    )}
-                </View>
-            )}
-
-      
-
-            {!showPreview && (
-                <View
-                    style={styles.controls}
-                >
-                   
-
-                    <TouchableOpacity
-                        style={
-                            styles.cameraControlButton
-                        }
-                        onPress={openGallery}
-                    >
-                        <Ionicons
-                            name="images"
-                            size={27}
-                            color="white"
-                        />
-                    </TouchableOpacity>
-
-                
-
-                    <TouchableOpacity
-                        style={
-                            styles.cameraControlButton
-                        }
-                        onPress={
-                            toggleFlash
-                        }
-                    >
-                        <Ionicons
-                            name={
-                                flashMode ===
-                                "on"
-                                    ? "flash"
-                                    : flashMode ===
-                                        "auto"
-                                      ? "flash-outline"
-                                      : "flash-off"
-                            }
-                            size={27}
-                            color={
-                                flashMode ===
-                                "auto"
-                                    ? "#FFD700"
-                                    : "white"
-                            }
-                        />
-                    </TouchableOpacity>
-
-           
-
-                    <CaptureButton
-                        onPress={
-                            takePhoto
-                        }
-                    />
-
-              
-
-                    <TouchableOpacity
-                        style={
-                            styles.cameraControlButton
-                        }
-                        onPress={
-                            flipCamera
-                        }
-                    >
-                        <Ionicons
-                            name="camera-reverse"
-                            size={29}
-                            color="white"
-                        />
-                    </TouchableOpacity>
-                </View>
-            )}
-
-  
-
-            {showPreview &&
-                latestImage && (
-                    <View
-                        ref={
-                            compositionRef
-                        }
-                        collapsable={
-                            false
-                        }
-                        style={
-                            styles.composition
-                        }
-                    >
-                        <Image
-                            source={{
-                                uri: latestImage,
-                            }}
-                            style={
-                                styles.compositionImage
-                            }
-                        />
-
-                      
-
-                        <View
-                            style={
-                                styles.compositionData
-                            }
-                        >
-                            {!!city && (
-                                <Text
-                                    style={
-                                        styles.compositionTitle
-                                    }
-                                >
-                                    {city}
-                                    {country
-                                        ? `, ${country}`
-                                        : ""}
-                                </Text>
-                            )}
-
-                            {latitude !==
-                                null &&
-                                longitude !==
-                                    null && (
-                                    <Text
-                                        style={
-                                            styles.compositionText
-                                        }
-                                    >
-                                        {
-                                            latitude
-                                        }
-                                        ,{" "}
-                                        {
-                                            longitude
-                                        }
-                                    </Text>
-                                )}
-
-                            {!!time && (
-                                <Text
-                                    style={
-                                        styles.compositionText
-                                    }
-                                >
-                                    {time}
-                                </Text>
-                            )}
-
-                            {!!formattedAddress && (
-                                <Text
-                                    style={
-                                        styles.compositionText
-                                    }
-                                >
-                                    {
-                                        formattedAddress
-                                    }
-                                </Text>
-                            )}
-                        </View>
-
-                   
-
-                        <View
-                            style={
-                                styles.previewTopControls
-                            }
-                        >
-                            <TouchableOpacity
-                                style={
-                                    styles.previewActionButton
-                                }
-                                onPress={
-                                    closeCamera
-                                }
-                            >
-                                <Ionicons
-                                    name="close"
-                                    size={25}
-                                    color="white"
-                                />
-
-                                <Text
-                                    style={
-                                        styles.previewActionText
-                                    }
-                                >
-                                    Close
-                                </Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={
-                                    styles.previewActionButton
-                                }
-                                onPress={
-                                    saveComposedImage
-                                }
-                                disabled={
-                                    isSaving
-                                }
-                            >
-                                <Ionicons
-                                    name="download-outline"
-                                    size={24}
-                                    color="white"
-                                />
-
-                                <Text
-                                    style={
-                                        styles.previewActionText
-                                    }
-                                >
-                                    {isSaving
-                                        ? "Saving..."
-                                        : "Save"}
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-
-                     
-
-                        <TouchableOpacity
-                            style={
-                                styles.retakeButton
-                            }
-                            onPress={
-                                retakePhoto
-                            }
-                        >
-                            <Ionicons
-                                name="camera-reverse-outline"
-                                size={24}
-                                color="white"
-                            />
-
-                            <Text
-                                style={
-                                    styles.retakeButtonText
-                                }
-                            >
-                                Retake
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
-
-      
-
-            <Modal
-                visible={showGallery}
-                animationType="slide"
-                presentationStyle="fullScreen"
-                statusBarTranslucent
-                onRequestClose={() =>
-                    setShowGallery(
-                        false
-                    )
-                }
+            <TouchableOpacity
+              style={styles.previewButton}
+              onPress={saveComposedImage}
+              disabled={isSaving}
             >
-                <View
-                    style={
-                        styles.galleryContainer
-                    }
-                >
-                    <TouchableOpacity
-                        style={
-                            styles.closeGalleryButton
-                        }
-                        onPress={() =>
-                            setShowGallery(
-                                false
-                            )
-                        }
-                    >
-                        <Ionicons
-                            name="close"
-                            size={32}
-                            color="white"
-                        />
-                    </TouchableOpacity>
+              <Ionicons
+                name="download-outline"
+                size={24}
+                color="white"
+              />
 
-                    <FlatList
-                        data={[
-                            ...capturedImages,
-                        ].reverse()}
-                        horizontal
-                        pagingEnabled
-                        keyExtractor={(
-                            _item,
-                            index
-                        ) =>
-                            index.toString()
-                        }
-                        showsHorizontalScrollIndicator={
-                            false
-                        }
-                        renderItem={({
-                            item,
-                        }) => (
-                            <View
-                                style={
-                                    styles.page
-                                }
-                            >
-                                <Image
-                                    source={{
-                                        uri: item,
-                                    }}
-                                    style={
-                                        styles.galleryImage
-                                    }
-                                />
-                            </View>
-                        )}
-                        getItemLayout={(
-                            _data,
-                            index
-                        ) => ({
-                            length: width,
-                            offset:
-                                width *
-                                index,
-                            index,
-                        })}
-                    />
-                </View>
-            </Modal>
+              <Text style={styles.buttonText}>
+                {isSaving
+                  ? "Saving..."
+                  : "Save"}
+              </Text>
+            </TouchableOpacity>
+
+          </View>
+
+       
+
+          <TouchableOpacity
+            style={styles.retakeButton}
+            onPress={retakePhoto}
+          >
+            <Ionicons
+              name="camera-reverse-outline"
+              size={24}
+              color="white"
+            />
+
+            <Text style={styles.buttonText}>
+              Retake
+            </Text>
+          </TouchableOpacity>
+
         </View>
-    );
+      )}
+
+    
+
+      <Modal
+        visible={showGallery}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        statusBarTranslucent
+        onRequestClose={() =>
+          setShowGallery(false)
+        }
+      >
+        <View style={styles.gallery}>
+
+          <TouchableOpacity
+            style={styles.galleryClose}
+            onPress={() =>
+              setShowGallery(false)
+            }
+          >
+            <Ionicons
+              name="close"
+              size={32}
+              color="white"
+            />
+          </TouchableOpacity>
+
+          <FlatList
+            data={[
+              ...capturedImages,
+            ].reverse()}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={
+              false
+            }
+            keyExtractor={(_, index) =>
+              index.toString()
+            }
+            renderItem={({ item }) => (
+              <View style={styles.page}>
+                <Image
+                  source={{ uri: item }}
+                  style={styles.galleryImage}
+                />
+              </View>
+            )}
+            getItemLayout={(_, index) => ({
+              length: width,
+              offset: width * index,
+              index,
+            })}
+          />
+
+        </View>
+      </Modal>
+
+    </View>
+  );
 }
 
 
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: "black",
-    },
-
-    camera: {
-        flex: 1,
-    },
-
-    gridContainer: {
-        ...StyleSheet.absoluteFill,
-        zIndex: 2,
-    },
-
-    gridVerticalLine: {
-        position: "absolute",
-        top: 0,
-        bottom: 0,
-        width: 1,
-
-        backgroundColor:
-            "rgba(255,255,255,0.45)",
-    },
-
-    gridHorizontalLine: {
-        position: "absolute",
-        left: 0,
-        right: 0,
-        height: 1,
-
-        backgroundColor:
-            "rgba(255,255,255,0.45)",
-    },
-
-    topControls: {
-        position: "absolute",
-        top: 50,
-        left: 16,
-        right: 16,
-
-        zIndex: 10,
-
-        flexDirection: "row",
-
-        justifyContent:
-            "space-between",
-
-        alignItems: "center",
-    },
-
-    roundButton: {
-        width: 46,
-        height: 46,
-
-        borderRadius: 23,
-
-        justifyContent: "center",
-        alignItems: "center",
-
-        backgroundColor:
-            "rgba(0,0,0,0.55)",
-    },
-
-    zoomContainer: {
-        position: "absolute",
-
-        bottom: 135,
-
-        alignSelf: "center",
-
-        zIndex: 10,
-
-        flexDirection: "row",
-        alignItems: "center",
-
-        backgroundColor:
-            "rgba(0,0,0,0.55)",
-
-        paddingHorizontal: 5,
-        paddingVertical: 4,
-
-        borderRadius: 30,
-    },
-
-    zoomButton: {
-        width: 40,
-        height: 40,
-
-        justifyContent: "center",
-        alignItems: "center",
-    },
-
-    zoomTextContainer: {
-        minWidth: 55,
-        height: 40,
-
-        justifyContent: "center",
-        alignItems: "center",
-    },
-
-    zoomText: {
-        color: "white",
-
-        fontSize: 16,
-
-        fontWeight: "700",
-    },
-
-    locationBox: {
-        position: "absolute",
-
-        left: 20,
-        right: 20,
-
-        bottom: 190,
-
-        zIndex: 8,
-
-        padding: 12,
-
-        borderRadius: 12,
-
-        backgroundColor:
-            "rgba(0,0,0,0.50)",
-    },
-
-    locationText: {
-        color: "white",
-
-        fontSize: 14,
-
-        marginBottom: 2,
-    },
-
-    locationCity: {
-        color: "white",
-
-        fontSize: 16,
-
-        fontWeight: "700",
-
-        marginTop: 4,
-    },
-
-    locationCountry: {
-        color: "white",
-
-        fontSize: 14,
-    },
-
-    locationTime: {
-        color: "white",
-
-        fontSize: 14,
-
-        marginTop: 3,
-    },
-
-    locationAddress: {
-        color: "white",
-
-        fontSize: 13,
-
-        marginTop: 3,
-    },
-
-    controls: {
-        position: "absolute",
-
-        bottom: 35,
-        left: 0,
-        right: 0,
-
-        zIndex: 10,
-
-        flexDirection: "row",
-
-        justifyContent:
-            "space-around",
-
-        alignItems: "center",
-
-        paddingHorizontal: 20,
-    },
-
-    cameraControlButton: {
-        width: 48,
-        height: 48,
-
-        borderRadius: 24,
-
-        justifyContent: "center",
-        alignItems: "center",
-
-        backgroundColor:
-            "rgba(0,0,0,0.40)",
-    },
-
-    composition: {
-        position: "absolute",
-
-        left: 0,
-        top: 0,
-
-        width,
-        height,
-
-        backgroundColor: "black",
-
-        zIndex: 20,
-    },
-
-    compositionImage: {
-        width: "100%",
-        height: "100%",
-
-        resizeMode: "cover",
-    },
-
-    compositionData: {
-        position: "absolute",
-
-        bottom: 120,
-        left: 20,
-        right: 20,
-
-        padding: 14,
-
-        borderRadius: 12,
-
-        backgroundColor:
-            "rgba(0,0,0,0.55)",
-    },
-
-    compositionTitle: {
-        color: "white",
-
-        fontSize: 17,
-
-        fontWeight: "700",
-
-        marginBottom: 5,
-    },
-
-    compositionText: {
-        color: "white",
-
-        fontSize: 14,
-
-        marginBottom: 3,
-    },
-
-    previewTopControls: {
-        position: "absolute",
-
-        top: 50,
-        left: 16,
-        right: 16,
-
-        zIndex: 30,
-
-        flexDirection: "row",
-
-        justifyContent:
-            "space-between",
-    },
-
-    previewActionButton: {
-        flexDirection: "row",
-
-        alignItems: "center",
-
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-
-        borderRadius: 24,
-
-        backgroundColor:
-            "rgba(0,0,0,0.60)",
-    },
-
-    previewActionText: {
-        color: "white",
-
-        fontSize: 15,
-
-        fontWeight: "600",
-
-        marginLeft: 6,
-    },
-
-    retakeButton: {
-        position: "absolute",
-
-        bottom: 45,
-
-        alignSelf: "center",
-
-        zIndex: 30,
-
-        flexDirection: "row",
-
-        alignItems: "center",
-
-        paddingHorizontal: 20,
-
-        paddingVertical: 12,
-
-        borderRadius: 26,
-
-        backgroundColor:
-            "rgba(0,0,0,0.65)",
-    },
-
-    retakeButtonText: {
-        color: "white",
-
-        fontSize: 16,
-
-        fontWeight: "600",
-
-        marginLeft: 7,
-    },
-
-    galleryContainer: {
-        flex: 1,
-
-        backgroundColor: "black",
-    },
-
-    closeGalleryButton: {
-        position: "absolute",
-
-        top: 50,
-        right: 20,
-
-        zIndex: 20,
-
-        width: 46,
-        height: 46,
-
-        borderRadius: 23,
-
-        justifyContent: "center",
-
-        alignItems: "center",
-
-        backgroundColor:
-            "rgba(0,0,0,0.55)",
-    },
-
-    page: {
-        width,
-        height,
-
-        justifyContent: "center",
-
-        alignItems: "center",
-    },
-
-    galleryImage: {
-        width: "100%",
-
-        height: "100%",
-
-        resizeMode: "contain",
-    },
+  container: {
+    flex: 1,
+    backgroundColor: "black",
+  },
+
+  camera: {
+    flex: 1,
+  },
+
+
+
+  gridContainer: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 2,
+  },
+
+  gridVertical: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 1,
+    backgroundColor:
+      "rgba(255,255,255,0.45)",
+  },
+
+  gridHorizontal: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor:
+      "rgba(255,255,255,0.45)",
+  },
+
+
+
+  topControls: {
+    position: "absolute",
+    top: 50,
+    left: 16,
+    right: 16,
+    zIndex: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+
+  roundButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor:
+      "rgba(0,0,0,0.55)",
+  },
+
+
+
+  zoomContainer: {
+    position: "absolute",
+    bottom: 135,
+    alignSelf: "center",
+    zIndex: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 5,
+    borderRadius: 30,
+    backgroundColor:
+      "rgba(0,0,0,0.55)",
+  },
+
+  zoomButton: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  zoomTextButton: {
+    minWidth: 55,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  zoomText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+
+ 
+
+  locationBox: {
+    position: "absolute",
+    left: 20,
+    right: 20,
+    bottom: 190,
+    zIndex: 8,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor:
+      "rgba(0,0,0,0.5)",
+  },
+
+  locationText: {
+    color: "white",
+    fontSize: 14,
+    marginBottom: 2,
+  },
+
+  locationCity: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 3,
+  },
+
+ 
+
+  controls: {
+    position: "absolute",
+    bottom: 35,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+
+  controlButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor:
+      "rgba(0,0,0,0.4)",
+  },
+
+
+
+  preview: {
+    position: "absolute",
+    width,
+    height,
+    backgroundColor: "black",
+    zIndex: 20,
+  },
+
+  previewImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+
+  photoInfo: {
+    position: "absolute",
+    bottom: 120,
+    left: 20,
+    right: 20,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor:
+      "rgba(0,0,0,0.55)",
+  },
+
+  photoTitle: {
+    color: "white",
+    fontSize: 17,
+    fontWeight: "700",
+    marginBottom: 5,
+  },
+
+  photoText: {
+    color: "white",
+    fontSize: 14,
+    marginBottom: 3,
+  },
+
+  previewTop: {
+    position: "absolute",
+    top: 50,
+    left: 16,
+    right: 16,
+    zIndex: 30,
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+
+  previewButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 24,
+    backgroundColor:
+      "rgba(0,0,0,0.6)",
+  },
+
+  buttonText: {
+    color: "white",
+    fontSize: 15,
+    fontWeight: "600",
+    marginLeft: 6,
+  },
+
+  retakeButton: {
+    position: "absolute",
+    bottom: 45,
+    alignSelf: "center",
+    zIndex: 30,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 26,
+    backgroundColor:
+      "rgba(0,0,0,0.65)",
+  },
+
+
+
+  gallery: {
+    flex: 1,
+    backgroundColor: "black",
+  },
+
+  galleryClose: {
+    position: "absolute",
+    top: 50,
+    right: 20,
+    zIndex: 20,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor:
+      "rgba(0,0,0,0.55)",
+  },
+
+  page: {
+    width,
+    height,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  galleryImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "contain",
+  },
 });

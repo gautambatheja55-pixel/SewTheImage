@@ -1,40 +1,49 @@
-import { Ionicons } from "@expo/vector-icons";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import {
+    StyleSheet,
+    TouchableOpacity,
+    View,
+} from "react-native";
 
 interface CaptureButtonProps {
-  onPress: () => void;
+    onPress: () => void;
 }
 
-export default function CaptureButton({ onPress }: CaptureButtonProps) {
-  return (
-    <TouchableOpacity 
-      style={styles.outerRing} 
-      onPress={onPress} 
-      activeOpacity={0.7}
-    >
-      <View style={styles.innerCircle}>
-        <Ionicons name="camera" size={28} color="black" />
-      </View>
-    </TouchableOpacity>
-  );
+export default function CaptureButton({
+    onPress,
+}: CaptureButtonProps) {
+    return (
+        <TouchableOpacity
+            onPress={onPress}
+            activeOpacity={0.7}
+            style={styles.outer}
+        >
+            <View style={styles.inner} />
+        </TouchableOpacity>
+    );
 }
 
 const styles = StyleSheet.create({
-  outerRing: {
-    width: 75,
-    height: 75,
-    borderRadius: 37.5,
-    borderWidth: 4,
-    borderColor: "white",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  innerCircle: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: "white",
-    justifyContent: "center",
-    alignItems: "center",
-  },
+    outer: {
+        width: 76,
+        height: 76,
+
+        borderRadius: 38,
+
+        borderWidth: 5,
+
+        borderColor: "white",
+
+        justifyContent: "center",
+
+        alignItems: "center",
+    },
+
+    inner: {
+        width: 60,
+        height: 60,
+
+        borderRadius: 30,
+
+        backgroundColor: "white",
+    },
 });
