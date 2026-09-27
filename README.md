@@ -1,4 +1,4 @@
-# Welcome to your Expo app 👋
+# Welcome to our First App (SewTheImage)👋
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
@@ -8,6 +8,7 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
 
    ```bash
    npm install
+   npx expo install expo-camera expo-location expo-media-library react-native-view-shot
    ```
 
 2. Start the app
@@ -16,41 +17,50 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+<h1>App Function: </h1><br>
+SewTheImage allows you to add (sew) the location and time directly into your photos<br>
+![alt text](<Screenshot 2026-09-27 224135.png>)
+<img src=".../Screenshot 2026-09-27 224135.png">
+It has:
+<ol>
+   <li>Latitude display</li>
+   <li><b>(Blurred lat and lon for privacy)</b></li> 
+   <li>Longitude display</li>
+   <li>Flashlight (The icon for automatic mode is wrong for now)</li>
+   <li>Shutter button</li>
+   <li>Zoom</li>
+   <li>Local time display </li>
+   <li> Street, city and country name display</li>
+   <li>Flip Camera button <li>
+   <li>Grid</li>
+   <li>Gallery to show the photos clicked</li>
+</ol>
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+<h1>Project Status</h1><br>
+The project is currently incomplete and our final version would include:
+Different UI formats for displaying data
+Maps satellite view of your location
+Recording
+Improved UI of Camera 
+More features in the App Gallery
+Weather Information of the Location
+Landscape/Horizontal Responsiveness
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+<h1>Tech Stack</h1>
+React Native
+Expo 
+TypeScript
+Expo Camera
+Expo location
+Expo media Gallery
+React Native View Shot
+Ionicons
 
-## Get a fresh project
+<h1>Requirements: </h1>
+Node.js
+npm
+expo
 
-When you're ready, run:
+<h1>Permissions: camera & location </h1>
 
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-### Other setup steps
-
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+The project was developed as a team but some team members tried their best but their contributions came with significant issues and as a result the the main branch had to be restored to the last working commit. Some members faced problems with merging causing lines of code of others to be deleted.
