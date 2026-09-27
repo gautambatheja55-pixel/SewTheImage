@@ -19,8 +19,9 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
 
 <h1>App Function: </h1><br>
 SewTheImage allows you to add (sew) the location and time directly into your photos<br>
-![alt text](<Screenshot 2026-09-27 224135.png>)
-![SewTheImage Screenshot](./Screenshot%202026-09-27%20224135.png)
+
+<img width="261" height="573" alt="Screenshot 2026-09-27 224135" src="https://github.com/user-attachments/assets/eab319a9-7169-4a7d-86c9-fe367de0ed6a" />
+
 It has:
 <ol>
    <li>Latitude display</li>
