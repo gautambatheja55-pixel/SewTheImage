@@ -4,6 +4,7 @@ import * as Location from "expo-location";
 import { useEffect, useState } from "react";
 import { Button, StyleSheet, Text, View } from 'react-native';
 
+
 export default function Index(){
   const [status,requestPermission]=useCameraPermissions();
   const [locationStatus,requestLocationPermission]=Location.useForegroundPermissions();
@@ -13,6 +14,8 @@ export default function Index(){
   const [country,setCountry] = useState("");
   const [time,setCurrentTime] = useState("");
   const [formattedAddress,setFormattedAddress]=useState("");
+ 
+
   
     const getLocation = async () => {
     if (!locationStatus?.granted){
