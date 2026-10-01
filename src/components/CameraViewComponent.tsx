@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { CameraType, CameraView } from "expo-camera";
-import * as MediaLibrary from "expo-media-library";
-import { Asset } from "expo-media-library";
+// import * as MediaLibrary from "expo-media-library";
 import { useEffect, useRef, useState } from "react";
 import {
   Dimensions,
@@ -39,7 +38,8 @@ export default function CameraViewComponent({
 }: CameraViewComponentProps) {
   const cameraRef = useRef<CameraView | null>(null);
   const compositionRef = useRef<View | null>(null);
-  const [mediaPermission,requestMediaPermission]=MediaLibrary.usePermissions();
+  const [imageLoaded,setImageLoaded] = useState(false);
+  // const [mediaPermission,requestMediaPermission]=MediaLibrary.usePermissions();
   const [facing, setFacing] = useState<CameraType>("back");
   const [capturedImages, setCapturedImages] = useState<string[]>([]);
   const [showGallery, setShowGallery] = useState(false);
@@ -53,7 +53,7 @@ export default function CameraViewComponent({
   const [isTakingPhoto, setIsTakingPhoto] = useState(false);
  
   useEffect(() => {
-    if (!compositionImage) return;
+    if (!compositionImage || !imageLoaded) return;
     const composeAndSave = async () => {
       try{
       await new Promise(resolve => setTimeout(resolve,100));
@@ -70,8 +70,8 @@ export default function CameraViewComponent({
       console.log(finalImageUri);
 
     setCapturedImages(prev => [...prev,finalImageUri,]);
-    await Asset.create(finalImageUri);
-    console.log("image svaed");
+    // await MediaLibrary.Asset.create(finalImageUri);
+    console.log("image saved");
   } catch (error){
     console.error(error);
   } finally {
@@ -80,7 +80,7 @@ export default function CameraViewComponent({
   }
   };
   composeAndSave();
-    },[compositionImage]);
+    },[compositionImage, imageLoaded]);
 
 
 
@@ -100,6 +100,7 @@ export default function CameraViewComponent({
         await cameraRef.current.takePictureAsync({
           quality: 1,
         });
+        console.log(photo.width,photo.height);
 
       if (!photo?.uri){
         setIsTakingPhoto(false);
@@ -375,9 +376,14 @@ export default function CameraViewComponent({
           </TouchableOpacity>
 
         </View>
+
       {compositionImage && (
         <View ref={compositionRef} collapsable={false} style={styles.composition}>
-          <Image source={{uri: compositionImage}} style={styles.compositionImage}/>
+          <Image source={{uri: compositionImage}} style={styles.compositionImage} onLoad={() => {
+            console.log("IMAGE LOADED");
+            setImageLoaded(true);
+          }}/>
+
           <View style={styles.compositionInfo}>
             {!!city && (
               <Text style={styles.photoTitle}>
@@ -444,10 +450,7 @@ export default function CameraViewComponent({
             }
             renderItem={({ item }) => (
               <View style={styles.page}>
-                <Image
-                  source={{ uri: item }}
-                  style={styles.galleryImage}
-                />
+                <Image source={{ uri: item }} style={styles.galleryImage}/>
               </View>
             )}
             getItemLayout={(_, index) => ({
@@ -476,7 +479,7 @@ const styles = StyleSheet.create({
 
   composition:{
     position:"absolute",
-    left:-width,
+    left:0,
     top:0,
     width,
     height,

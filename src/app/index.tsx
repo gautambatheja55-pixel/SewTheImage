@@ -84,7 +84,6 @@ export default function Index(){
   }
   
  
-
   return (
   <CameraViewComponent
   latitude={latitude}
