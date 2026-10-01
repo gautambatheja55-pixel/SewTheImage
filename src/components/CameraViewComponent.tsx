@@ -1,7 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { CameraType, CameraView } from "expo-camera";
+<<<<<<< Updated upstream
 // import * as MediaLibrary from "expo-media-library";
 import { useEffect, useRef, useState } from "react";
+=======
+import * as MediaLibrary from "expo-media-library";
+import { Asset } from "expo-media-library";
+import { useRef, useState } from "react";
+>>>>>>> Stashed changes
 import {
   Dimensions,
   FlatList,
@@ -37,9 +43,14 @@ export default function CameraViewComponent({
   onClose = () => {},
 }: CameraViewComponentProps) {
   const cameraRef = useRef<CameraView | null>(null);
+<<<<<<< Updated upstream
   const compositionRef = useRef<View | null>(null);
   const [imageLoaded,setImageLoaded] = useState(false);
   // const [mediaPermission,requestMediaPermission]=MediaLibrary.usePermissions();
+=======
+  const previewRef = useRef<View | null>(null);
+
+>>>>>>> Stashed changes
   const [facing, setFacing] = useState<CameraType>("back");
   const [capturedImages, setCapturedImages] = useState<string[]>([]);
   const [showGallery, setShowGallery] = useState(false);
@@ -47,6 +58,7 @@ export default function CameraViewComponent({
     useState<"off" | "on" | "auto">("off");
 
   const [showGrid, setShowGrid] = useState(true);
+  const [mediaPermission,MediaPermission] = MediaLibrary.usePermissions();
   const [zoom, setZoom] = useState(0);
   const [compositionImage , setCompositionImage]= useState<string | null>(null);
   const [isCameraReady, setIsCameraReady] = useState(false);
@@ -113,6 +125,57 @@ export default function CameraViewComponent({
     }
   };
 
+<<<<<<< Updated upstream
+=======
+  
+
+  const retakePhoto = () => {
+    setCapturedImages((prev) =>
+      prev.slice(0, -1)
+    );
+
+    setShowPreview(false);
+  };
+
+
+  const saveComposedImage = async () => {
+    if (!latestImage || !previewRef.current || isSaving) return;
+
+    try {
+      setIsSaving(true);
+      const finalImageUri = await captureRef( 
+        previewRef.current,{
+          format:"jpg",
+          quality:1,
+        }
+      );
+
+      if (!mediaPermission?.granted){
+        const permission = await MediaPermission();
+
+        if (!permission.granted){
+          console.log("perm denied");
+          return;
+        }
+      }
+      const asset= await Asset.create(finalImageUri);
+      console.log("saved to",asset.id);
+      
+      setCapturedImages((prev) => [
+        ...prev.slice(0,-1),
+        finalImageUri,
+      ]);
+      setShowPreview(false);
+
+    } catch (error) {
+      console.error("Error saving image:",error);
+
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+>>>>>>> Stashed changes
   const flipCamera = () => {
     setFacing((current) =>
       current === "back"
@@ -377,12 +440,21 @@ export default function CameraViewComponent({
 
         </View>
 
+<<<<<<< Updated upstream
       {compositionImage && (
         <View ref={compositionRef} collapsable={false} style={styles.composition}>
           <Image source={{uri: compositionImage}} style={styles.compositionImage} onLoad={() => {
             console.log("IMAGE LOADED");
             setImageLoaded(true);
           }}/>
+=======
+    
+
+      {showPreview && latestImage && (
+        <View ref = {previewRef} style={styles.preview}>
+          <Image source={{ uri: latestImage}} style={styles.previewImage}/>
+          <View style={styles.photoInfo}>
+>>>>>>> Stashed changes
 
           <View style={styles.compositionInfo}>
             {!!city && (
