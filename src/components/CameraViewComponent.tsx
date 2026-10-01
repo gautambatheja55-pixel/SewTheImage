@@ -1,13 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { CameraType, CameraView } from "expo-camera";
-<<<<<<< Updated upstream
-// import * as MediaLibrary from "expo-media-library";
-import { useEffect, useRef, useState } from "react";
-=======
 import * as MediaLibrary from "expo-media-library";
 import { Asset } from "expo-media-library";
 import { useRef, useState } from "react";
->>>>>>> Stashed changes
 import {
   Dimensions,
   FlatList,
@@ -43,14 +38,8 @@ export default function CameraViewComponent({
   onClose = () => {},
 }: CameraViewComponentProps) {
   const cameraRef = useRef<CameraView | null>(null);
-<<<<<<< Updated upstream
-  const compositionRef = useRef<View | null>(null);
-  const [imageLoaded,setImageLoaded] = useState(false);
-  // const [mediaPermission,requestMediaPermission]=MediaLibrary.usePermissions();
-=======
   const previewRef = useRef<View | null>(null);
 
->>>>>>> Stashed changes
   const [facing, setFacing] = useState<CameraType>("back");
   const [capturedImages, setCapturedImages] = useState<string[]>([]);
   const [showGallery, setShowGallery] = useState(false);
@@ -60,41 +49,17 @@ export default function CameraViewComponent({
   const [showGrid, setShowGrid] = useState(true);
   const [mediaPermission,MediaPermission] = MediaLibrary.usePermissions();
   const [zoom, setZoom] = useState(0);
-  const [compositionImage , setCompositionImage]= useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [isTakingPhoto, setIsTakingPhoto] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const latestImage =
+    capturedImages.length > 0
+      ? capturedImages[capturedImages.length - 1]
+      : null;
+
  
-  useEffect(() => {
-    if (!compositionImage || !imageLoaded) return;
-    const composeAndSave = async () => {
-      try{
-      await new Promise(resolve => setTimeout(resolve,100));
-      if (!compositionRef.current){
-        console.error("View not ready ");
-        return; 
-      }
-      const finalImageUri = await captureRef(
-        compositionRef,{
-          format:"png",
-          quality:1,
-        }
-      );
-      console.log(finalImageUri);
-
-    setCapturedImages(prev => [...prev,finalImageUri,]);
-    // await MediaLibrary.Asset.create(finalImageUri);
-    console.log("image saved");
-  } catch (error){
-    console.error(error);
-  } finally {
-    setCompositionImage(null);
-    setIsTakingPhoto(false);
-  }
-  };
-  composeAndSave();
-    },[compositionImage, imageLoaded]);
-
-
 
   const takePhoto = async () => {
     if (
@@ -112,21 +77,22 @@ export default function CameraViewComponent({
         await cameraRef.current.takePictureAsync({
           quality: 1,
         });
-        console.log(photo.width,photo.height);
 
-      if (!photo?.uri){
-        setIsTakingPhoto(false);
-        return;
-      }
-      setCompositionImage(photo.uri);
+      if (!photo?.uri) return;
+
+      setCapturedImages((prev) => [
+        ...prev,
+        photo.uri,
+      ]);
+
+      setShowPreview(true);
     } catch (error) {
       console.error("Error taking photo:", error);
+    } finally {
       setIsTakingPhoto(false);
     }
   };
 
-<<<<<<< Updated upstream
-=======
   
 
   const retakePhoto = () => {
@@ -175,7 +141,6 @@ export default function CameraViewComponent({
     }
   };
 
->>>>>>> Stashed changes
   const flipCamera = () => {
     setFacing((current) =>
       current === "back"
@@ -220,7 +185,9 @@ export default function CameraViewComponent({
   return (
     <View style={styles.container}>
 
-     
+   
+
+      {!showPreview && (
         <CameraView
           ref={cameraRef}
           style={styles.camera}
@@ -239,7 +206,11 @@ export default function CameraViewComponent({
             setIsCameraReady(false);
           }}
         />
-      
+      )}
+
+   
+
+      {showGrid && !showPreview && (
         <View
           pointerEvents="none"
           style={styles.gridContainer}
@@ -272,12 +243,22 @@ export default function CameraViewComponent({
             ]}
           />
         </View>
+      )}
 
+
+
+      {!showPreview && (
         <View style={styles.topControls}>
+
+      
 
           <TouchableOpacity
             style={styles.roundButton}
-            onPress={onClose}>
+            onPress={() => {
+              setShowPreview(false);
+              onClose?.();
+            }}
+          >
             <Ionicons
               name="close"
               size={27}
@@ -306,7 +287,11 @@ export default function CameraViewComponent({
           </TouchableOpacity>
 
         </View>
+      )}
 
+
+
+      {!showPreview && (
         <View style={styles.zoomContainer}>
 
           <TouchableOpacity
@@ -341,7 +326,11 @@ export default function CameraViewComponent({
           </TouchableOpacity>
 
         </View>
+      )}
+
    
+
+      {!showPreview && (
         <View style={styles.locationBox}>
 
           <Text style={styles.locationText}>
@@ -377,7 +366,11 @@ export default function CameraViewComponent({
           )}
 
         </View>
+      )}
 
+      
+
+      {!showPreview && (
         <View style={styles.controls}>
 
          
@@ -439,50 +432,112 @@ export default function CameraViewComponent({
           </TouchableOpacity>
 
         </View>
+      )}
 
-<<<<<<< Updated upstream
-      {compositionImage && (
-        <View ref={compositionRef} collapsable={false} style={styles.composition}>
-          <Image source={{uri: compositionImage}} style={styles.compositionImage} onLoad={() => {
-            console.log("IMAGE LOADED");
-            setImageLoaded(true);
-          }}/>
-=======
     
 
       {showPreview && latestImage && (
         <View ref = {previewRef} style={styles.preview}>
           <Image source={{ uri: latestImage}} style={styles.previewImage}/>
           <View style={styles.photoInfo}>
->>>>>>> Stashed changes
 
-          <View style={styles.compositionInfo}>
             {!!city && (
               <Text style={styles.photoTitle}>
-                {city}{country ? ` ,${country}` : ""}
+                {city}
+                {country
+                  ? `, ${country}`
+                  : ""}
               </Text>
             )}
 
-            {latitude !==null && longitude !==null && (
-              <Text style={styles.photoText}>
-                {latitude}, {longitude}
-              </Text>
-            )}
+            {latitude !== null &&
+              longitude !== null && (
+                <Text style={styles.photoText}>
+                  {latitude}, {longitude}
+                </Text>
+              )}
 
             {!!time && (
               <Text style={styles.photoText}>
                 {time}
-            </Text>
+              </Text>
             )}
 
-            {!! formattedAddress && (
+            {!!formattedAddress && (
               <Text style={styles.photoText}>
                 {formattedAddress}
               </Text>
             )}
-           </View>
+
+          </View>
+
+          
+
+          <View style={styles.previewTop}>
+
+        
+
+            <TouchableOpacity
+              style={styles.previewButton}
+              onPress={() => {
+                setShowPreview(false);
+                onClose?.();
+              }}
+            >
+              <Ionicons
+                name="close"
+                size={25}
+                color="white"
+              />
+
+              <Text style={styles.buttonText}>
+                Close
+              </Text>
+            </TouchableOpacity>
+
+       
+
+            <TouchableOpacity
+              style={styles.previewButton}
+              onPress={saveComposedImage}
+              disabled={isSaving}
+            >
+              <Ionicons
+                name="download-outline"
+                size={24}
+                color="white"
+              />
+
+              <Text style={styles.buttonText}>
+                {isSaving
+                  ? "Saving..."
+                  : "Save"}
+              </Text>
+            </TouchableOpacity>
+
+          </View>
+
+       
+
+          <TouchableOpacity
+            style={styles.retakeButton}
+            onPress={retakePhoto}
+          >
+            <Ionicons
+              name="camera-reverse-outline"
+              size={24}
+              color="white"
+            />
+
+            <Text style={styles.buttonText}>
+              Retake
+            </Text>
+          </TouchableOpacity>
+
         </View>
       )}
+
+    
 
       <Modal
         visible={showGallery}
@@ -522,7 +577,10 @@ export default function CameraViewComponent({
             }
             renderItem={({ item }) => (
               <View style={styles.page}>
-                <Image source={{ uri: item }} style={styles.galleryImage}/>
+                <Image
+                  source={{ uri: item }}
+                  style={styles.galleryImage}
+                />
               </View>
             )}
             getItemLayout={(_, index) => ({
@@ -539,6 +597,8 @@ export default function CameraViewComponent({
   );
 }
 
+
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -549,30 +609,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  composition:{
-    position:"absolute",
-    left:0,
-    top:0,
-    width,
-    height,
-    backgroundColor:"black",
-  },
 
-  compositionImage:{
-    width:"100%",
-    height:"100%",
-    resizeMode:"cover",
-  },
 
-  compositionInfo:{
-    position:"absolute",
-    bottom:40,
-    left:20,
-    right:20,
-    padding:14,
-    borderRadius:12,
-    backgroundColor:"rgba(0,0,0,0.55)"
-  },
   gridContainer: {
     ...StyleSheet.absoluteFill,
     zIndex: 2,
@@ -705,6 +743,32 @@ const styles = StyleSheet.create({
   },
 
 
+
+  preview: {
+    position: "absolute",
+    width,
+    height,
+    backgroundColor: "black",
+    zIndex: 20,
+  },
+
+  previewImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+
+  photoInfo: {
+    position: "absolute",
+    bottom: 120,
+    left: 20,
+    right: 20,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor:
+      "rgba(0,0,0,0.55)",
+  },
+
   photoTitle: {
     color: "white",
     fontSize: 17,
@@ -717,6 +781,49 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 3,
   },
+
+  previewTop: {
+    position: "absolute",
+    top: 50,
+    left: 16,
+    right: 16,
+    zIndex: 30,
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+
+  previewButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 24,
+    backgroundColor:
+      "rgba(0,0,0,0.6)",
+  },
+
+  buttonText: {
+    color: "white",
+    fontSize: 15,
+    fontWeight: "600",
+    marginLeft: 6,
+  },
+
+  retakeButton: {
+    position: "absolute",
+    bottom: 45,
+    alignSelf: "center",
+    zIndex: 30,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 26,
+    backgroundColor:
+      "rgba(0,0,0,0.65)",
+  },
+
+
 
   gallery: {
     flex: 1,
