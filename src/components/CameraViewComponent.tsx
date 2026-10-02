@@ -8,6 +8,7 @@ import {
   FlatList,
   Image,
   Modal,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -46,7 +47,7 @@ export default function CameraViewComponent({
   const [flashMode, setFlashMode] =
     useState<"off" | "on" | "auto">("off");
 
-  const [showGrid, setShowGrid] = useState(true);
+  const [showGrid, setShowGrid] = useState(false);
   const [mediaPermission,MediaPermission] = MediaLibrary.usePermissions();
   const [zoom, setZoom] = useState(0);
   const [showPreview, setShowPreview] = useState(false);
@@ -99,6 +100,21 @@ export default function CameraViewComponent({
     );
 
     setShowPreview(false);
+  };
+
+
+  // Share photo has problems in sharing the image will change this to expo-share later
+  const sharePhoto = async () => {
+    if (!latestImage) return;
+    try {
+      const finalImageUri = await createComposedImage();
+      if (!finalImageUri) return;
+      await Share.share(
+        { url: finalImageUri}
+      );
+    } catch (error){
+      console.error(error)
+    }
   };
 
   const createComposedImage = async() => {
@@ -210,8 +226,6 @@ export default function CameraViewComponent({
   return (
     <View style={styles.container}>
 
-   
-
       {!showPreview && (
         <CameraView
           ref={cameraRef}
@@ -232,8 +246,6 @@ export default function CameraViewComponent({
           }}
         />
       )}
-
-   
 
       {showGrid && !showPreview && (
         <View
@@ -270,8 +282,6 @@ export default function CameraViewComponent({
         </View>
       )}
 
-
-
       {!showPreview && (
         <View style={styles.topControls}>
 
@@ -302,8 +312,6 @@ export default function CameraViewComponent({
 
         </View>
       )}
-
-
 
       {!showPreview && (
         <View style={styles.zoomContainer}>
@@ -518,27 +526,31 @@ export default function CameraViewComponent({
 
           </View>
 
-       
-
+          <View style={styles.bottomButtons}>
           <TouchableOpacity
             style={styles.retakeButton}
-            onPress={retakePhoto}
+            onPress={sharePhoto}
           >
             <Ionicons
-              name="camera-reverse-outline"
+              name="share-outline"
               size={24}
               color="white"
             />
 
             <Text style={styles.buttonText}>
-              Retake
+              Share
             </Text>
           </TouchableOpacity>
-
+          <TouchableOpacity style={styles.retakeButton}
+          onPress={retakePhoto}>
+            <Ionicons name="camera-reverse-outline" size={24} color="white"/>
+            <Text style={styles.buttonText}>
+              Retake
+              </Text>
+          </TouchableOpacity>
         </View>
+    </View>
       )}
-
-    
 
       <Modal
         visible={showGallery}
@@ -776,6 +788,15 @@ const styles = StyleSheet.create({
       "rgba(0,0,0,0.55)",
   },
 
+  bottomButtons:{
+    position:"absolute",
+    bottom:150,
+    alignSelf:"center",
+    zIndex:30,
+    flexDirection:"row",
+    gap:12,
+  },
+
   photoTitle: {
     color: "white",
     fontSize: 17,
@@ -817,11 +838,6 @@ const styles = StyleSheet.create({
   },
 
   retakeButton: {
-    position: "absolute",
-    bottom: 120,
-    alignSelf: "center",
-    zIndex: 30,
-    elevation: 30,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 20,
