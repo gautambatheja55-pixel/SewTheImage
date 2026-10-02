@@ -101,18 +101,27 @@ export default function CameraViewComponent({
     setShowPreview(false);
   };
 
+  const createComposedImage = async() => {
+    if (!compositionRef.current){
+      return null;
+    }
+    const finalImageUri = await captureRef(
+      compositionRef.current,
+      {
+        format:"jpg",
+        quality:1,
+      }
+    );
+    return finalImageUri;
+  };
 
   const saveComposedImage = async () => {
-    if (!latestImage || !compositionRef.current || isSaving) return;
+    if (!latestImage || isSaving) return;
 
     try {
       setIsSaving(true);
-      const finalImageUri = await captureRef( 
-        compositionRef.current,{
-          format:"jpg",
-          quality:1,
-        }
-      );
+      const finalImageUri = await createComposedImage();
+      if (!finalImageUri) return;
 
       if (!mediaPermission?.granted){
         const permission = await MediaPermission();
@@ -122,6 +131,7 @@ export default function CameraViewComponent({
           return;
         }
       }
+
       const asset= await Asset.create(finalImageUri);
       console.log("saved to",asset.id);
       
@@ -136,6 +146,23 @@ export default function CameraViewComponent({
 
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const closePreview = async() => {
+    if (!latestImage) return;
+
+    try {
+      const finalImageUri=await createComposedImage();
+      if (!finalImageUri) return;
+
+      setCapturedImages((prev) => [
+        ...prev.slice(0,-1),
+        finalImageUri,
+      ]);
+      setShowPreview(false);
+    } catch (error){
+      console.error(error);
     }
   };
 
@@ -250,20 +277,9 @@ export default function CameraViewComponent({
 
       
 
-          <TouchableOpacity
-            style={styles.roundButton}
-            onPress={() => {
-              setShowPreview(false);
-              onClose?.();
-            }}
-          >
-            <Ionicons
-              name="close"
-              size={27}
-              color="white"
-            />
+          <TouchableOpacity style={styles.roundButton} onPress={onClose}>
+            <Ionicons name="close" size={27} color="white"/>
           </TouchableOpacity>
-
          
           <TouchableOpacity
             style={styles.roundButton}
@@ -475,10 +491,7 @@ export default function CameraViewComponent({
 
             <TouchableOpacity
               style={styles.previewButton}
-              onPress={() => {
-                setShowPreview(false);
-                onClose?.();
-              }}
+              onPress={closePreview}
             >
               <Ionicons
                 name="close"
