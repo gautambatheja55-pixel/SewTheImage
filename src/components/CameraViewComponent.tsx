@@ -2,13 +2,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { CameraType, CameraView } from "expo-camera";
 import * as MediaLibrary from "expo-media-library";
 import { Asset } from "expo-media-library";
+import * as Sharing from "expo-sharing";
 import { useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
   Image,
   Modal,
-  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -16,7 +16,6 @@ import {
 } from "react-native";
 import { captureRef } from "react-native-view-shot";
 import CaptureButton from "./CaptureButton";
-import SatelliteMap from "./Satellitemap";
 
 
 const mapboxApiKey = process.env.EXPO_PUBLIC_MAPBOX_API_KEY;
@@ -113,9 +112,18 @@ export default function CameraViewComponent({
     try {
       const finalImageUri = await createComposedImage();
       if (!finalImageUri) return;
-      await Share.share(
-        { url: finalImageUri}
-      );
+      const sharingAvailable = await Sharing.isAvailableAsync();
+      if (!sharingAvailable){
+        console.log("sharing not available on device")
+        return;
+      }
+    await Sharing.shareAsync(
+      finalImageUri,
+      {
+        mimeType:"image/jpeg",
+        dialogTitle:"Share photo",
+      }
+    );
     } catch (error){
       console.error(error)
     }
@@ -468,27 +476,12 @@ export default function CameraViewComponent({
               </Text>
             )}
 
-<<<<<<< HEAD
-            {latitude !==null && longitude !==null && (
-              <>
-              <Text style={styles.photoText}>
-                {latitude}, {longitude}
-              </Text>
-
-              <SatelliteMap
-                latitude={latitude}
-                longitude={longitude}
-                />
-                </>
-                )}
-=======
             {latitude !== null &&
               longitude !== null && (
                 <Text style={styles.photoText}>
                   {latitude}° {longitude}°
                 </Text>
               )}
->>>>>>> 9d1239bbdbc4062ed997a75ef5217367cf84ba6b
 
             {!!time && (
               <Text style={styles.photoText}>
