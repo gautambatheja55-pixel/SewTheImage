@@ -15,6 +15,10 @@ import {
 } from "react-native";
 import { captureRef } from "react-native-view-shot";
 import CaptureButton from "./CaptureButton";
+import SatelliteMap from "./Satellitemap";
+
+
+const mapboxApiKey = process.env.EXPO_PUBLIC_MAPBOX_API_KEY;
 
 const { width, height } = Dimensions.get("screen");
 
@@ -386,10 +390,17 @@ export default function CameraViewComponent({
             )}
 
             {latitude !==null && longitude !==null && (
+              <>
               <Text style={styles.photoText}>
                 {latitude}, {longitude}
               </Text>
-            )}
+
+              <SatelliteMap
+                latitude={latitude}
+                longitude={longitude}
+                />
+                </>
+                )}
 
             {!!time && (
               <Text style={styles.photoText}>
