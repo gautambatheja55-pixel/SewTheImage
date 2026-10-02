@@ -2,7 +2,7 @@ import CameraViewComponent from "@/components/CameraViewComponent";
 import { useCameraPermissions } from 'expo-camera';
 import * as Location from "expo-location";
 import { useEffect, useState } from "react";
-import { Button, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 
 export default function Index(){
@@ -15,7 +15,13 @@ export default function Index(){
   const [time,setCurrentTime] = useState("");
   const [formattedAddress,setFormattedAddress]=useState("");
  
-
+  useEffect(()=> {
+    const requestPermissions = async() => {
+      await requestPermission();
+      await requestLocationPermission();
+    };
+    requestPermissions();
+  }, []);
   
     const getLocation = async () => {
     if (!locationStatus?.granted){
@@ -64,27 +70,14 @@ export default function Index(){
     return () => clearInterval(interval);
   },[]);
 
-  if (!status){
+  if (!status?.granted || !locationStatus?.granted){
     return( 
       <View style={styles.container}>
         <Text>Checking camera permission...</Text>
       </View>
       );
   }
-
-  if (!status.granted) {
-    return(
-      <View style={styles.container}>
-        <Button title="Location"
-        onPress={requestLocationPermission}/>
-        <Button title="Camera"
-        onPress={requestPermission}/>
-      </View> 
-    );
-  }
-  
  
-
   return (
   <CameraViewComponent
   latitude={latitude}

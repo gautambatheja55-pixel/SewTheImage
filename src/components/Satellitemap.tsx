@@ -46,7 +46,7 @@ export default function SatelliteMap({
                                     bottom: 16,
                                     width: 150,
                                     height: 130,
-                                    borderRadius: 16,
+                                    borderRadius: 17,
                                     overflow: "hidden",
 
 
