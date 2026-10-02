@@ -38,9 +38,9 @@ export default function CameraViewComponent({
   onClose = () => {},
 }: CameraViewComponentProps) {
   const cameraRef = useRef<CameraView | null>(null);
-  const previewRef = useRef<View | null>(null);
-
+  const compositionRef = useRef<View | null>(null);
   const [facing, setFacing] = useState<CameraType>("back");
+  const [previewAspectRatio, setPreviewAspectRatio] = useState(3/4);
   const [capturedImages, setCapturedImages] = useState<string[]>([]);
   const [showGallery, setShowGallery] = useState(false);
   const [flashMode, setFlashMode] =
@@ -62,11 +62,7 @@ export default function CameraViewComponent({
  
 
   const takePhoto = async () => {
-    if (
-      !isCameraReady ||
-      !cameraRef.current ||
-      isTakingPhoto
-    ) {
+    if (!isCameraReady || !cameraRef.current || isTakingPhoto) {
       return;
     }
 
@@ -79,7 +75,9 @@ export default function CameraViewComponent({
         });
 
       if (!photo?.uri) return;
-
+      if (photo.width && photo.height){
+        setPreviewAspectRatio(photo.width/photo.height);
+      }
       setCapturedImages((prev) => [
         ...prev,
         photo.uri,
@@ -105,12 +103,12 @@ export default function CameraViewComponent({
 
 
   const saveComposedImage = async () => {
-    if (!latestImage || !previewRef.current || isSaving) return;
+    if (!latestImage || !compositionRef.current || isSaving) return;
 
     try {
       setIsSaving(true);
       const finalImageUri = await captureRef( 
-        previewRef.current,{
+        compositionRef.current,{
           format:"jpg",
           quality:1,
         }
@@ -329,7 +327,6 @@ export default function CameraViewComponent({
       )}
 
    
-
       {!showPreview && (
         <View style={styles.locationBox}>
 
@@ -435,12 +432,13 @@ export default function CameraViewComponent({
       )}
 
     
-
       {showPreview && latestImage && (
-        <View ref = {previewRef} style={styles.preview}>
-          <Image source={{ uri: latestImage}} style={styles.previewImage}/>
+        <View style={styles.preview}>
+          <View ref={compositionRef} collapsable={false} style={styles.composition}>
+           <Image source={{ uri: latestImage}}
+             style={[styles.previewImage, {aspectRatio: previewAspectRatio},]}/>
           <View style={styles.photoInfo}>
-
+          
             {!!city && (
               <Text style={styles.photoTitle}>
                 {city}
@@ -470,12 +468,10 @@ export default function CameraViewComponent({
             )}
 
           </View>
-
+        </View>
           
 
-          <View style={styles.previewTop}>
-
-        
+          <View style={styles.previewTop}>  
 
             <TouchableOpacity
               style={styles.previewButton}
@@ -609,7 +605,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-
+ composition:{
+  width:"100%",
+  flex:1,
+  alignItems:"center",
+  justifyContent:"center",
+ },
 
   gridContainer: {
     ...StyleSheet.absoluteFill,
@@ -745,17 +746,19 @@ const styles = StyleSheet.create({
 
 
   preview: {
-    position: "absolute",
+    position:"absolute",
     width,
     height,
     backgroundColor: "black",
     zIndex: 20,
+    alignItems:"center",
+    justifyContent:"center",
+   
   },
 
   previewImage: {
     width: "100%",
-    height: "100%",
-    resizeMode: "cover",
+    resizeMode:"contain",
   },
 
   photoInfo: {
