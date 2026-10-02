@@ -346,24 +346,16 @@ export default function CameraViewComponent({
       {!showPreview && (
         <View style={styles.locationBox}>
 
-          <Text style={styles.locationText}>
-            Lat: {latitude ?? "N/A"}
-          </Text>
-
-          <Text style={styles.locationText}>
-            Long: {longitude ?? "N/A"}
-          </Text>
-
           {!!city && (
-            <Text style={styles.locationCity}>
-              {city}
+            <Text style={styles.photoTitle}>
+              {city}{country ? `, ${country}` : ""}
             </Text>
           )}
 
-          {!!country && (
-            <Text style={styles.locationText}>
-              {country}
-            </Text>
+          {latitude !== null && longitude !== null && (
+              <Text style={styles.photoText}>
+                  {latitude}° {longitude}°
+              </Text>
           )}
 
           {!!time && (
@@ -467,7 +459,7 @@ export default function CameraViewComponent({
             {latitude !== null &&
               longitude !== null && (
                 <Text style={styles.photoText}>
-                  {latitude}, {longitude}
+                  {latitude}° {longitude}°
                 </Text>
               )}
 
@@ -623,6 +615,7 @@ const styles = StyleSheet.create({
   flex:1,
   alignItems:"center",
   justifyContent:"center",
+  transform:[{translateY: -60}],
  },
 
   gridContainer: {
@@ -648,8 +641,6 @@ const styles = StyleSheet.create({
       "rgba(255,255,255,0.45)",
   },
 
-
-
   topControls: {
     position: "absolute",
     top: 50,
@@ -674,7 +665,7 @@ const styles = StyleSheet.create({
 
   zoomContainer: {
     position: "absolute",
-    bottom: 135,
+    top:50,
     alignSelf: "center",
     zIndex: 10,
     flexDirection: "row",
@@ -711,9 +702,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 20,
     right: 20,
-    bottom: 190,
+    bottom: 120,
     zIndex: 8,
-    padding: 12,
+    padding: 14,
     borderRadius: 12,
     backgroundColor:
       "rgba(0,0,0,0.5)",
@@ -776,7 +767,7 @@ const styles = StyleSheet.create({
 
   photoInfo: {
     position: "absolute",
-    bottom: 120,
+    bottom: 190,
     left: 20,
     right: 20,
     padding: 14,
@@ -827,9 +818,10 @@ const styles = StyleSheet.create({
 
   retakeButton: {
     position: "absolute",
-    bottom: 45,
+    bottom: 120,
     alignSelf: "center",
     zIndex: 30,
+    elevation: 30,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 20,
