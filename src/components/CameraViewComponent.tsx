@@ -2,20 +2,22 @@ import { Ionicons } from "@expo/vector-icons";
 import { CameraType, CameraView } from "expo-camera";
 import * as MediaLibrary from "expo-media-library";
 import { Asset } from "expo-media-library";
-import * as Sharing from "expo-sharing";
 import { useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
   Image,
   Modal,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { captureRef } from "react-native-view-shot";
 import CaptureButton from "./CaptureButton";
+import SatelliteMap from "./Satellitemap";
 
 
 const mapboxApiKey = process.env.EXPO_PUBLIC_MAPBOX_API_KEY;
@@ -53,6 +55,7 @@ export default function CameraViewComponent({
   const [showGrid, setShowGrid] = useState(false);
   const [mediaPermission,MediaPermission] = MediaLibrary.usePermissions();
   const [zoom, setZoom] = useState(0);
+  const pinchStartZoom = useRef(0);
   const [showPreview, setShowPreview] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [isTakingPhoto, setIsTakingPhoto] = useState(false);
@@ -112,18 +115,9 @@ export default function CameraViewComponent({
     try {
       const finalImageUri = await createComposedImage();
       if (!finalImageUri) return;
-      const sharingAvailable = await Sharing.isAvailableAsync();
-      if (!sharingAvailable){
-        console.log("sharing not available on device")
-        return;
-      }
-    await Sharing.shareAsync(
-      finalImageUri,
-      {
-        mimeType:"image/jpeg",
-        dialogTitle:"Share photo",
-      }
-    );
+      await Share.share(
+        { url: finalImageUri}
+      );
     } catch (error){
       console.error(error)
     }
@@ -234,11 +228,30 @@ export default function CameraViewComponent({
     zoom === 0
       ? "1×"
       : `${(1 + zoom * 4).toFixed(1)}×`;
+  
+  const pinchGesture = Gesture.Pinch()
+    .runOnJS(true)
+    .onBegin(() => {
+      pinchStartZoom.current = zoom;
+    })
+    .onUpdate((event) => {
+      const newZoom = Math.min(
+        1,
+        Math.max(
+          0,
+          pinchStartZoom.current + (event.scale - 1) * 0.5
+        )
+      );
+
+      setZoom(newZoom);
+    });
+
 
   return (
     <View style={styles.container}>
 
       {!showPreview && (
+        <GestureDetector gesture={pinchGesture}>
         <CameraView
           ref={cameraRef}
           style={styles.camera}
@@ -257,6 +270,7 @@ export default function CameraViewComponent({
             setIsCameraReady(false);
           }}
         />
+        </GestureDetector>
       )}
 
       {showGrid && !showPreview && (
@@ -476,12 +490,18 @@ export default function CameraViewComponent({
               </Text>
             )}
 
-            {latitude !== null &&
-              longitude !== null && (
-                <Text style={styles.photoText}>
-                  {latitude}° {longitude}°
-                </Text>
-              )}
+            {latitude !==null && longitude !==null && (
+              <>
+              <Text style={styles.photoText}>
+                {latitude}, {longitude}
+              </Text>
+
+              <SatelliteMap
+                latitude={latitude}
+                longitude={longitude}
+                />
+                </>
+                )}
 
             {!!time && (
               <Text style={styles.photoText}>
