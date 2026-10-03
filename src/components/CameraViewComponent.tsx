@@ -260,6 +260,7 @@ export default function CameraViewComponent({
           style={styles.camera}
           facing={facing}
           zoom={zoom}
+          flash={flashMode}
           enableTorch={flashMode === "on"}
           onCameraReady={() =>
             setIsCameraReady(true)
