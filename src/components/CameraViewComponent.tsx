@@ -331,7 +331,7 @@ export default function CameraViewComponent({
           >
             <Ionicons
               name="grid-outline"
-              size={23}
+              size={24}
               color={
                 showGrid
                   ? "#FFD700"
