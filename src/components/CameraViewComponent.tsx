@@ -2,13 +2,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { CameraType, CameraView } from "expo-camera";
 import * as MediaLibrary from "expo-media-library";
 import { Asset } from "expo-media-library";
+import * as Sharing from "expo-sharing";
 import { useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
   Image,
   Modal,
-  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -109,15 +109,18 @@ export default function CameraViewComponent({
   };
 
 
-  // Share photo has problems in sharing the image will change this to expo-share later
   const sharePhoto = async () => {
     if (!latestImage) return;
     try {
       const finalImageUri = await createComposedImage();
       if (!finalImageUri) return;
-      await Share.share(
-        { url: finalImageUri}
-      );
+     const sharingAvailable= await Sharing.isAvailableAsync();
+     if (!sharingAvailable){
+      console.log("sharing not avaliable on this device ")
+      return;
+     }
+
+    await Sharing.shareAsync(finalImageUri);
     } catch (error){
       console.error(error)
     }

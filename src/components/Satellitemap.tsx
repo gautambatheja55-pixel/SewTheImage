@@ -1,5 +1,6 @@
 import Mapbox from "@rnmapbox/maps";
 import { StyleSheet, View } from "react-native";
+import {useEffect} from "react";
 
 type SatelliteMapProps = {
     latitude: number;
@@ -10,6 +11,17 @@ export default function SatelliteMap({
     latitude,
     longitude,
     }: SatelliteMapProps) {
+        useEffect(() => {
+            console.log("satellite map mounted");
+            console.log(latitude);
+            console.log(longitude);
+        },[]);
+        if (
+            latitude < -90 || longitude < -180 || latitude > 90 || longitude >180
+        ){
+            console.log("coordinates out of range")
+            return;
+        }
         return (
             <View style={styles.container}>
                 <Mapbox.MapView
@@ -20,6 +32,10 @@ export default function SatelliteMap({
                     pitchEnabled={false}
                     rotateEnabled={false}
                     scaleBarEnabled={false}
+                    onDidFinishLoadingMap={()=>{
+                        console.log("mapbox map finish loading");
+                    }}
+                    
                     >
                         <Mapbox.Camera
                             centerCoordinate={[longitude, latitude]}
