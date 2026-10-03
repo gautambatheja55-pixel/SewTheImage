@@ -1,6 +1,9 @@
 import Mapbox from "@rnmapbox/maps";
 import { StyleSheet, View } from "react-native";
 
+Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_API_KEY);
+
+
 type SatelliteMapProps = {
     latitude: number;
     longitude: number;
