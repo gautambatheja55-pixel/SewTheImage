@@ -277,6 +277,15 @@ export default function CameraViewComponent({
         </GestureDetector>
       )}
 
+      {!showPreview &&
+      latitude !== null &&
+      longitude !== null && (
+        <SatelliteMap
+          latitude={latitude}
+          longitude={longitude}
+          />
+      )}
+
       {showGrid && !showPreview && (
         <View
           pointerEvents="none"
