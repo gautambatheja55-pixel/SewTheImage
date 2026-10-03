@@ -19,6 +19,7 @@
     "expo-maps": "~57.0.3",
     "expo-media-library": "~57.0.5",
     "expo-router": "~57.0.24",
+    "expo-sharing": "~57.0.22",
     "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",
     "expo-symbols": "~57.0.3",
