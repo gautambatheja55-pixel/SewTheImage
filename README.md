@@ -20,8 +20,7 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
 
 <h1>App Function: </h1><br>
 SewTheImage allows you to add (sew) the location and time directly into your photos/vedios<br>
-
-<img width="261" height="573" alt="Screenshot 2026-09-27 224135" src="https://github.com/user-attachments/assets/eab319a9-7169-4a7d-86c9-fe367de0ed6a" />
+<img width="1029" height="1600" alt="image" src="https://github.com/user-attachments/assets/391b9704-91fd-4013-b609-33e74aece575" />
 
 It has:
 <ol>
@@ -40,13 +39,6 @@ It has:
    <li>Crop, delete, print in the App Gallery</li>
    <li>Weather Information of the Location</li>
    <li>Recording</li>
-</ol>
-<br>
-<h1>Project Status</h1><br>
-The project is currently incomplete and our final version would include:
-<ol>
-   <li>Different UI formats for displaying data</li>
-   <li>Landscape/Horizontal Responsiveness</li>
 </ol>
 <br>
 <h1>Tech Stack</h1>
