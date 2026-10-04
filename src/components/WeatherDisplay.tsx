@@ -12,11 +12,17 @@ export default function WeatherDisplay({
   latitude,
   longitude,
 }: WeatherDisplayProps) {
-  const [weatherData, setWeather] = useState<any>(null);
+  const [weatherData, setWeather] = useState<{
+    temp: number;
+    description: string;
+  } | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (latitude === null || longitude === null) return;
+
     const fetchWeatherData = async () => {
       try {
         setLoading(true);
@@ -31,13 +37,22 @@ export default function WeatherDisplay({
         }
 
         const data = await response.json();
-        setWeather(data);
-      } catch (error: unknown) {
-        setError(
-          error instanceof Error ? error.message : "Could not load the weather",
-        );
-      } finally {
+        setWeather({
+          temp: Math.round(data.main.temp),
+          description: data.weather[0]?.description ?? "",
+      });
+
+      setLoading(false);
+
+
+      } catch (error) {
+        console.log("Weather fetch error:", error);
+        setWeather(null);
+        setError("Unable to fetch weather");
         setLoading(false);
+
+
+    
       }
     };
 
@@ -51,13 +66,11 @@ export default function WeatherDisplay({
       {!loading && error && <Text style={styles.text}>{error}</Text>}
 
       {weatherData && !loading && !error && (
-        <>
-          <Text style={styles.text}>{weatherData.name}</Text>
+        <View style={styles.weatherRow}>
 
-          <Text style={styles.text}>{Math.round(weatherData.main.temp)}°C</Text>
-
-          <Text style={styles.text}>{weatherData.weather[0]?.description}</Text>
-        </>
+          <Text style={styles.text}>{Math.round(weatherData.temp)}°C</Text>
+          <Text style={styles.text}>{weatherData.description}</Text>
+        </View>
       )}
     </View>
   );
@@ -66,13 +79,20 @@ export default function WeatherDisplay({
 const styles = StyleSheet.create({
   container: {
     position: "absolute",
-    top: 20,
+    top: 380,
     left: 20,
-    padding: 12,
-    backgroundColor: "rgba(0, 0, 0, 0.65)",
+    padding: 10,
+    backgroundColor: "rgba(0, 0, 0, 0.70)",
+    borderRadius:20,
+    
+  },
+  weatherRow:{
+    flexDirection:"row",
+    alignItems:"center",
+    gap:6,
   },
   text: {
     color: "white",
-    fontSize: 16,
+    fontSize: 10,
   },
 });

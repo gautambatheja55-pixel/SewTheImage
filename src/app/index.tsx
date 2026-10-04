@@ -1,7 +1,9 @@
 import CameraViewComponent from "@/components/CameraViewComponent";
+import { TabBarContext } from "@/components/TabBarContext";
 import { useCameraPermissions } from 'expo-camera';
 import * as Location from "expo-location";
-import { useEffect, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { use, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from 'react-native';
 
 
@@ -37,25 +39,34 @@ export default function Index(){
       console.log("Location permission not granted");
       return;
     }
-
-    const location = await Location.getCurrentPositionAsync({});
-    const address = await Location.reverseGeocodeAsync({
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude,
-    });
+    try{
+       const location = await Location.getCurrentPositionAsync({});
+       setLatitude(location.coords.latitude);
+       setLongitude(location.coords.longitude);
+       console.log(location);
     
-    console.log(address);
-    console.log(location);
-    if (address.length > 0){
-      setCity(address[0].city ?? "");
-      setCountry(address[0].country ?? "");
-      setFormattedAddress(address[0].formattedAddress ?? "");
+        try{
+          const address = await Location.reverseGeocodeAsync({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          });
+    
+          console.log(address);
+        
+          if (address.length > 0){
+            setCity(address[0].city ?? "");
+            setCountry(address[0].country ?? "");
+            setFormattedAddress(address[0].formattedAddress ?? "");
+          }
+        } catch (error){
+          console.log(error);
+          setCity("");
+          setCountry("");
+          setFormattedAddress("");
+        }
+    } catch (error){
+      console.log(error);
     }
-
-    console.log("Location recieved: ", location)
-    setLatitude(location.coords.latitude);
-    setLongitude(location.coords.longitude);
-
   };
  
  

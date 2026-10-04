@@ -1,4 +1,3 @@
-// Expo SDK 57. Install: npx expo install expo-file-system expo-print expo-video
 import { Ionicons } from "@expo/vector-icons";
 import {
   CameraView,
@@ -12,7 +11,12 @@ import * as MediaLibrary from "expo-media-library";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { useVideoPlayer, VideoView } from "expo-video";
-import { useEffect, useRef, useState, type ComponentProps } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -60,10 +64,25 @@ interface CameraViewComponentProps {
 }
 
 const GALLERY_FOLDER = "sewtheimage-gallery-v1";
+const [showCaptureAnimation, setShowCaptureAnimation] = useState(false);
+
+
 const cropOptions = [
-  { value: "original", label: "Original" },
-  { value: "square", label: "Square" },
-  { value: "fourThree", label: "4:3" },
+  {
+    value: "original",
+    icon: "expand-outline",
+    accessibilityLabel: "Original aspect ratio",
+  },
+  {
+    value: "square",
+    icon: "square-outline",
+    accessibilityLabel: "Square crop",
+  },
+  {
+    value: "fourThree",
+    icon: "tablet-landscape-outline",
+    accessibilityLabel: "4:3 crop",
+  },
 ] as const;
 const clampZoom = (value: number) => Math.max(0, Math.min(1, value));
 const newId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -118,7 +137,6 @@ function parseStore(text: string): GalleryStore {
   return { ...data, pendingDelete: data.pendingDelete ?? null };
 }
 
-// A complete temporary index replaces the live index; a backup can recover it.
 function writeStore(store: GalleryStore) {
   const directory = galleryDirectory();
   const index = new File(directory, "gallery.json");
@@ -198,7 +216,6 @@ async function copyMedia(
 }
 
 function removeMediaFile(item: MediaItem) {
-  // Only this app's owned media paths can be deleted, never the phone's Photos library.
   if (!isMediaItem(item)) return;
   try {
     const file = mediaFile(item);
@@ -225,15 +242,125 @@ function permissionMessage(title: string, message: string) {
   ]);
 }
 
+type PhotoOverlays = {
+  photoId: string;
+  loading: boolean;
+  mapReady: boolean;
+  weather: string | null;
+  mapUri: string | null;
+  missing: string[];
+};
+const emptyOverlays = (photoId = ""): PhotoOverlays => ({
+  photoId,
+  loading: !!photoId,
+  mapReady: true,
+  weather: null,
+  mapUri: null,
+  missing: [],
+});
+async function withTimeout<T>(
+  operation: Promise<T>,
+  milliseconds = 15000,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("Loading timed out.")),
+          milliseconds,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+async function loadPhotoOverlays(
+  latitude: number | null,
+  longitude: number | null,
+) {
+  const result = {
+    weather: null as string | null,
+    mapUri: null as string | null,
+    missing: [] as string[],
+  };
+  if (latitude === null || longitude === null) return result;
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    Math.abs(latitude) > 90 ||
+    Math.abs(longitude) > 180
+  ) {
+    return { ...result, missing: ["weather", "satellite map"] };
+  }
+  await Promise.all([
+    (async () => {
+      const controller = new AbortController();
+      try {
+        const key = process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY;
+        if (!key) throw new Error("Weather key is missing.");
+        const data = await withTimeout(
+          fetch(
+            `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${encodeURIComponent(key)}&units=metric`,
+            { signal: controller.signal },
+          ).then(async (response) => {
+            if (!response.ok) throw new Error("Weather unavailable.");
+            return (await response.json()) as {
+              main?: { temp?: number };
+              weather?: { description?: string }[];
+            };
+          }),
+        );
+        if (
+          typeof data.main?.temp !== "number" ||
+          !Number.isFinite(data.main.temp) ||
+          !data.weather?.[0]?.description
+        )
+          throw new Error("Incomplete weather data.");
+        result.weather = `${Math.round(data.main.temp)}°C · ${data.weather[0].description}`;
+      } catch {
+        result.missing.push("weather");
+      } finally {
+        controller.abort();
+      }
+    })(),
+    (async () => {
+      try {
+        const key = process.env.EXPO_PUBLIC_MAPBOX_API_KEY;
+        if (!key) throw new Error("Map key is missing.");
+        const mapbox = require("@rnmapbox/maps")
+          .default as typeof import("@rnmapbox/maps").default;
+        await withTimeout(Promise.resolve(mapbox.setAccessToken(key)));
+        const uri = await withTimeout(
+          mapbox.snapshotManager.takeSnap({
+            centerCoordinate: [longitude, latitude],
+            zoomLevel: 17,
+            width: 480,
+            height: 360,
+            styleURL: mapbox.StyleURL.Satellite,
+            writeToDisk: true,
+            withLogo: true,
+          }),
+        );
+        if (!uri) throw new Error("Map image unavailable.");
+        result.mapUri = uri.startsWith("/") ? `file://${uri}` : uri;
+      } catch {
+        result.missing.push("satellite map");
+      }
+    })(),
+  ]);
+  return result;
+}
+
 type IconButtonProps = ComponentProps<typeof TouchableOpacity> & {
   icon: ComponentProps<typeof Ionicons>["name"];
-  label?: string;
   size?: number;
   color?: string;
 };
 function IconButton({
   icon,
-  label,
   size = 24,
   color = "white",
   disabled,
@@ -247,10 +374,9 @@ function IconButton({
       disabled={disabled}
       style={[style, disabled && styles.disabled]}
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityLabel={accessibilityLabel}
     >
       <Ionicons name={icon} size={size} color={color} />
-      {label && <Text style={styles.buttonText}>{label}</Text>}
     </TouchableOpacity>
   );
 }
@@ -339,9 +465,14 @@ export default function CameraViewComponent({
   const [flashMode, setFlashMode] = useState<"off" | "on" | "auto">("off");
   const [zoom, setZoom] = useState(0);
   const [showGrid, setShowGrid] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState<
+"original" | "bw" | "vintage" | "bright"
+>("original");
   const [showGallery, setShowGallery] = useState(false);
   const [previewPhoto, setPreviewPhoto] = useState<MediaItem | null>(null);
   const [previewReady, setPreviewReady] = useState(false);
+  const [overlays, setOverlays] = useState<PhotoOverlays>(emptyOverlays());
+  const overlayRef = useRef<PhotoOverlays>(emptyOverlays());
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [cropAspect, setCropAspect] = useState<CropAspect>("square");
   const [isCameraReady, setCameraReadyState] = useState(false);
@@ -369,6 +500,52 @@ export default function CameraViewComponent({
     cameraReadyRef.current = ready;
     if (mountedRef.current) setCameraReadyState(ready);
   };
+  const publishOverlays = (next: PhotoOverlays) => {
+    overlayRef.current = next;
+    if (mountedRef.current) setOverlays(next);
+  };
+  useEffect(() => {
+    if (!previewPhoto) return;
+    let active = true;
+    const photoId = previewPhoto.id;
+    publishOverlays(emptyOverlays(photoId));
+    void loadPhotoOverlays(latitude, longitude).then((loaded) => {
+      if (active && mountedRef.current) {
+        publishOverlays({
+          ...loaded,
+          photoId,
+          loading: false,
+          mapReady: !loaded.mapUri,
+        });
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [previewPhoto?.id, latitude, longitude]);
+
+  useEffect(() => {
+    if (!overlays.mapUri || overlays.mapReady) return;
+    const photoId = overlays.photoId;
+    const uri = overlays.mapUri;
+    const timer = setTimeout(() => {
+      const current = overlayRef.current;
+      if (
+        current.photoId === photoId &&
+        current.mapUri === uri &&
+        !current.mapReady
+      ) {
+        publishOverlays({
+          ...current,
+          mapUri: null,
+          mapReady: true,
+          missing: [...current.missing, "satellite map"],
+        });
+      }
+    }, 10000);
+    return () => clearTimeout(timer);
+  }, [overlays.photoId, overlays.mapUri, overlays.mapReady]);
+
   const publishStore = (next: GalleryStore) => {
     storeRef.current = next;
     if (mountedRef.current) setStore(next);
@@ -532,9 +709,16 @@ export default function CameraViewComponent({
       mode === "video" ? "Recording video" : "Taking photo",
       async () => {
         if (mode === "picture") {
+          setShowCaptureAnimation(true);
           const photo = await cameraRef.current!.takePictureAsync({
             quality: 1,
           });
+
+          setTimeout(() => {
+            setShowCaptureAnimation(false);
+
+          }, 150);
+
           if (!photo?.uri)
             throw new Error(
               "The camera did not return a photo. Please try again.",
@@ -544,6 +728,7 @@ export default function CameraViewComponent({
             height: photo.height,
           });
           if (mountedRef.current) {
+            publishOverlays(emptyOverlays(item.id));
             setPreviewReady(false);
             setPreviewPhoto(item);
           }
@@ -598,9 +783,36 @@ export default function CameraViewComponent({
     );
   };
 
-  const finishPreview = (saveToPhone = false) => {
-    if (!previewPhoto || !previewReady || !compositionRef.current) return;
+  const finishPreview = (saveToPhone = false, allowMissing = false) => {
+    const prepared = overlayRef.current;
+    if (
+      !previewPhoto ||
+      !previewReady ||
+      !compositionRef.current ||
+      prepared.photoId !== previewPhoto.id ||
+      prepared.loading ||
+      !prepared.mapReady
+    )
+      return;
+    if (prepared.missing.length && !allowMissing) {
+      Alert.alert(
+        "Some photo details are unavailable",
+        `Could not load: ${prepared.missing.join(", ")}. Save without these details?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Save without them",
+            onPress: () => finishPreview(saveToPhone, true),
+          },
+        ],
+      );
+      return;
+    }
     void runTask("Saving photo", async () => {
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
+      if (!mountedRef.current || !compositionRef.current) return;
       const uri = await captureRef(compositionRef.current!, {
         format: "jpg",
         quality: 1,
@@ -834,6 +1046,17 @@ export default function CameraViewComponent({
     !loadError &&
     (!isBusy || isRecording) &&
     !isStopping;
+  const canSavePreview =
+    previewReady &&
+    overlays.photoId === previewPhoto?.id &&
+    !overlays.loading &&
+    overlays.mapReady;
+  const photoRatio = (previewPhoto?.width ?? 3) / (previewPhoto?.height ?? 4);
+  const photoWidth = Math.max(
+    1,
+    Math.min(width - 32, Math.max(1, height - 200) * photoRatio),
+  );
+  const photoHeight = photoWidth / photoRatio;
   const minutes = Math.floor(recordingSeconds / 60)
     .toString()
     .padStart(2, "0");
@@ -847,22 +1070,20 @@ export default function CameraViewComponent({
         cameraPermission?.granted && (
           <GestureDetector gesture={pinchGesture}>
             <CameraView
-              key={`${mode}-${facing}`}
               ref={cameraRef}
               style={styles.camera}
               mode={mode}
               facing={facing}
               zoom={zoom}
-              flash={flashMode}
-              enableTorch={mode === "video" && flashMode === "on"}
-              mute={false}
-              videoQuality="1080p"
               onCameraReady={() => setIsCameraReady(true)}
               onMountError={(error) => {
                 setIsCameraReady(false);
                 Alert.alert("Camera error", error.message);
               }}
             />
+            {showCaptureAnimation && (
+              <View style={styles.captureAnimation} />
+            )}
           </GestureDetector>
         )}
       {!previewPhoto && !showGallery && (
@@ -872,7 +1093,9 @@ export default function CameraViewComponent({
             latitude !== null &&
             longitude !== null && (
               <>
-                <SatelliteMap latitude={latitude} longitude={longitude} />
+                {SatelliteMap && (
+                  <SatelliteMap latitude={latitude} longitude={longitude} />
+                )}
                 <WeatherDisplay latitude={latitude} longitude={longitude} />
               </>
             )}
@@ -884,7 +1107,7 @@ export default function CameraViewComponent({
               </Text>
               <IconButton
                 icon="camera-outline"
-                label="Allow camera"
+                accessibilityLabel="Allow camera"
                 style={styles.blueButton}
                 onPress={() => {
                   if (cameraPermission?.canAskAgain === false)
@@ -954,6 +1177,38 @@ export default function CameraViewComponent({
               onPress={() => setZoom((current) => clampZoom(current + 0.1))}
             />
           </View>
+          <View style={styles.filterRow}>
+            <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => setSelectedFilter("original")}
+            >
+              <Text style={styles.filterText}>Original</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => setSelectedFilter("bw")}
+            >
+              <Text style={styles.filterText}>B&W</Text>
+
+            </TouchableOpacity>
+
+            <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => setSelectedFilter("vintage")}
+            >
+              <Text style={styles.filterText}>Vintage</Text>
+
+            </TouchableOpacity>
+
+            <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => setSelectedFilter("bright")}
+            >
+              <Text style={styles.filterText}>Bright</Text>
+            </TouchableOpacity>
+
+          </View>
           {isRecording && (
             <Text style={styles.recordingBadge}>
               ● REC {minutes}:{seconds}
@@ -965,7 +1220,7 @@ export default function CameraViewComponent({
               <Text style={styles.message}>{loadError}</Text>
               <IconButton
                 icon="refresh"
-                label="Retry gallery"
+                accessibilityLabel="Retry gallery"
                 style={styles.blueButton}
                 onPress={refreshGallery}
               />
@@ -985,12 +1240,19 @@ export default function CameraViewComponent({
                 disabled={isBusy}
                 onPress={() => changeMode(value)}
                 accessibilityRole="button"
+                accessibilityLabel={
+                  value === "picture" ? "Photo mode" : "Video mode"
+                }
                 accessibilityState={{ selected: mode === value }}
                 style={[styles.modeOption, mode === value && styles.activeMode]}
               >
-                <Text style={styles.modeText}>
-                  {value === "picture" ? "Photo" : "Video"}
-                </Text>
+                <Ionicons
+                  name={
+                    value === "picture" ? "camera-outline" : "videocam-outline"
+                  }
+                  size={24}
+                  color="white"
+                />
               </TouchableOpacity>
             ))}
           </View>
@@ -1059,17 +1321,14 @@ export default function CameraViewComponent({
           <View
             ref={compositionRef}
             collapsable={false}
-            style={styles.composition}
+            style={[
+              styles.composition,
+              { width: photoWidth, height: photoHeight },
+            ]}
           >
             <Image
               source={{ uri: mediaFile(previewPhoto).uri }}
-              style={[
-                styles.previewImage,
-                {
-                  aspectRatio:
-                    (previewPhoto.width ?? 3) / (previewPhoto.height ?? 4),
-                },
-              ]}
+              style={styles.previewImage}
               onLoad={() => setPreviewReady(true)}
               onError={() =>
                 Alert.alert(
@@ -1078,29 +1337,119 @@ export default function CameraViewComponent({
                 )
               }
             />
-            <PhotoDetails {...details} preview />
+            <View pointerEvents="none" style={styles.savedDetails}>
+              {!!city && (
+                <Text style={styles.savedTitle} numberOfLines={1}>
+                  {city}
+                  {country ? `, ${country}` : ""}
+                </Text>
+              )}
+              {latitude !== null && longitude !== null && (
+                <Text style={styles.savedText}>
+                  {latitude.toFixed(5)}, {longitude.toFixed(5)}
+                </Text>
+              )}
+              {!!time && (
+                <Text style={styles.savedText} numberOfLines={1}>
+                  {time}
+                </Text>
+              )}
+              {!!formattedAddress && (
+                <Text style={styles.savedText} numberOfLines={2}>
+                  {formattedAddress}
+                </Text>
+              )}
+              {!!overlays.weather && (
+                <Text style={styles.savedText} numberOfLines={2}>
+                  {overlays.weather}
+                </Text>
+              )}
+            </View>
+            {!!overlays.mapUri && (
+              <View pointerEvents="none" style={styles.savedMap}>
+                <Image
+                  source={{ uri: overlays.mapUri }}
+                  style={styles.galleryMedia}
+                  resizeMode="contain"
+                  onLoad={() => {
+                    const current = overlayRef.current;
+                    if (
+                      current.photoId === previewPhoto.id &&
+                      current.mapUri === overlays.mapUri
+                    ) {
+                      publishOverlays({ ...current, mapReady: true });
+                    }
+                  }}
+                  onError={() => {
+                    const current = overlayRef.current;
+                    if (
+                      current.photoId === previewPhoto.id &&
+                      current.mapUri === overlays.mapUri
+                    ) {
+                      publishOverlays({
+                        ...current,
+                        mapUri: null,
+                        mapReady: true,
+                        missing: [...current.missing, "satellite map"],
+                      });
+                    }
+                  }}
+                />
+                <View style={styles.savedMarker} />
+              </View>
+            )}
           </View>
+          {!canSavePreview && (
+            <View style={styles.preparingPhoto}>
+              <ActivityIndicator color="white" />
+              <Text style={styles.message}>Preparing photo details…</Text>
+            </View>
+          )}
+
+            <Image
+            source={{ uri: mediaFile(previewPhoto).uri }}
+            style={[
+              styles.previewImage,
+              selectedFilter === "bw" && { opacity: 0.7 },
+              selectedFilter === "vintage" && { opacity: 0.85 },
+              selectedFilter === "bright" && { opacity: 1.2 },
+            ]}
+            onLoad={() => setPreviewReady(true)}
+            onError={() => Alert.alert("clicking")}
+            />
+
+            <View style={styles.metadatabadge}>
+              <Text style={StyleSheet.metadataText}>
+                📍 {city}, {country}
+
+              </Text>
+              <Text style={StyleSheet.metadataText}>
+                 🕐 {time}
+              </Text>
+              </View>
+          
+
           <View style={[styles.topControls, styles.previewControls]}>
             <IconButton
               icon="close"
               size={25}
-              label="Close"
+              accessibilityLabel="Close"
               style={styles.previewButton}
-              disabled={isBusy || !previewReady}
+              disabled={isBusy || !canSavePreview}
               onPress={() => finishPreview()}
             />
             <IconButton
               icon="download-outline"
-              label="Save"
+              accessibilityLabel="Save"
               style={styles.previewButton}
-              disabled={isBusy || !previewReady}
+              disabled={isBusy || !canSavePreview}
               onPress={() => finishPreview(true)}
             />
           </View>
           <View style={styles.bottomButtons}>
             <IconButton
               icon="camera-reverse-outline"
-              label="Retake"
+              accessibilityLabel="Retake"
               style={styles.previewButton}
               disabled={isBusy}
               onPress={retakePhoto}
@@ -1213,20 +1562,22 @@ export default function CameraViewComponent({
                       : "Photo deleted"}
                   </Text>
                   <View style={styles.undoActions}>
-                    <TouchableOpacity
+                    <IconButton
+                      icon="arrow-undo-outline"
+                      color="#60a5fa"
+                      style={styles.roundButton}
                       disabled={isBusy}
                       onPress={undoDelete}
                       accessibilityLabel="Undo deletion"
-                    >
-                      <Text style={styles.undoText}>Undo</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
+                    />
+                    <IconButton
+                      icon="trash-outline"
+                      color="#fca5a5"
+                      style={styles.roundButton}
                       disabled={isBusy}
                       onPress={confirmDelete}
                       accessibilityLabel="Keep media deleted"
-                    >
-                      <Text style={styles.deleteText}>Delete</Text>
-                    </TouchableOpacity>
+                    />
                   </View>
                 </View>
               )}
@@ -1234,19 +1585,24 @@ export default function CameraViewComponent({
                 <>
                   {isPhoto ? (
                     <View style={styles.cropOptions}>
-                      {cropOptions.map(({ value, label }) => (
-                        <TouchableOpacity
-                          key={value}
-                          disabled={isBusy}
-                          onPress={() => setCropAspect(value)}
-                          style={[
-                            styles.cropOption,
-                            cropAspect === value && styles.activeMode,
-                          ]}
-                        >
-                          <Text style={styles.modeText}>{label}</Text>
-                        </TouchableOpacity>
-                      ))}
+                      {cropOptions.map(
+                        ({ value, icon, accessibilityLabel }) => (
+                          <IconButton
+                            key={value}
+                            icon={icon}
+                            accessibilityLabel={accessibilityLabel}
+                            accessibilityState={{
+                              selected: cropAspect === value,
+                            }}
+                            disabled={isBusy}
+                            onPress={() => setCropAspect(value)}
+                            style={[
+                              styles.cropOption,
+                              cropAspect === value && styles.activeMode,
+                            ]}
+                          />
+                        ),
+                      )}
                     </View>
                   ) : (
                     <Text style={styles.muted}>
@@ -1256,14 +1612,14 @@ export default function CameraViewComponent({
                   <View style={styles.actionRow}>
                     <IconButton
                       icon="crop-outline"
-                      label="Crop"
+                      accessibilityLabel="Crop"
                       style={[styles.galleryButton, styles.blue]}
                       disabled={isBusy || !isPhoto}
                       onPress={cropSelected}
                     />
                     <IconButton
                       icon="share-outline"
-                      label="Share"
+                      accessibilityLabel="Share"
                       style={[styles.galleryButton, styles.green]}
                       disabled={isBusy}
                       onPress={shareSelected}
@@ -1272,14 +1628,14 @@ export default function CameraViewComponent({
                   <View style={styles.actionRow}>
                     <IconButton
                       icon="print-outline"
-                      label="Print"
+                      accessibilityLabel="Print"
                       style={[styles.galleryButton, styles.purple]}
                       disabled={isBusy || !isPhoto}
                       onPress={printSelected}
                     />
                     <IconButton
                       icon="trash-outline"
-                      label="Delete"
+                      accessibilityLabel="Delete"
                       style={[styles.galleryButton, styles.red]}
                       disabled={isBusy}
                       onPress={deleteSelected}
@@ -1341,11 +1697,11 @@ const styles = StyleSheet.create({
   },
   photoTitle: {
     color: "white",
-    fontSize: 17,
+    fontSize: 12,
     fontWeight: "700",
-    marginBottom: 5,
+    marginBottom: 2,
   },
-  photoText: { color: "white", fontSize: 14, marginBottom: 3 },
+  photoText: { color: "white", fontSize: 10, marginBottom: 1},
   permissionBox: {
     flex: 1,
     justifyContent: "center",
@@ -1401,7 +1757,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   zoomText: { color: "white", fontSize: 16, fontWeight: "700" },
-  gridContainer: { ...StyleSheet.absoluteFill, zIndex: 2 },
+  gridContainer: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 2,
+  },
   gridVertical: {
     position: "absolute",
     top: 0,
@@ -1420,10 +1783,11 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 20,
     right: 20,
-    bottom: 185,
+    padding:6,
+    width:"53%",
+    bottom: "30%",
     zIndex: 8,
-    padding: 12,
-    borderRadius: 12,
+    borderRadius: 8,
     backgroundColor: "rgba(0,0,0,0.5)",
   },
   modeSelector: {
@@ -1439,7 +1803,6 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     backgroundColor: "#333",
   },
-  modeText: { color: "white", fontSize: 14, fontWeight: "600" },
   activeMode: { backgroundColor: "#1677ff" },
   controls: {
     position: "absolute",
@@ -1516,14 +1879,49 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  composition: {
-    width: "100%",
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    transform: [{ translateY: -60 }],
+  composition: { backgroundColor: "black", overflow: "hidden" },
+  previewImage: { width: "100%", height: "100%", resizeMode: "contain" },
+  savedDetails: {
+    position: "absolute",
+    bottom: "3%",
+    left: "3%",
+    width: "53%",
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: "rgba(0,0,0,0.65)",
   },
-  previewImage: { width: "100%", resizeMode: "contain" },
+  savedTitle: { color: "white", fontSize: 12, fontWeight: "700" },
+  savedText: { color: "white", fontSize: 10 },
+  savedMap: {
+    position: "absolute",
+    bottom: "3%",
+    right: "3%",
+    width: "36%",
+    aspectRatio: 4 / 3,
+    overflow: "hidden",
+    borderRadius: 8,
+    backgroundColor: "black",
+  },
+  savedMarker: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    width: 10,
+    height: 10,
+    marginLeft: -5,
+    marginTop: -5,
+    borderRadius: 5,
+    backgroundColor: "red",
+    borderWidth: 1,
+    borderColor: "white",
+  },
+  preparingPhoto: {
+    position: "absolute",
+    top: 110,
+    alignSelf: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
   photoInfo: {
     position: "absolute",
     bottom: 190,
@@ -1544,7 +1942,7 @@ const styles = StyleSheet.create({
   },
   bottomButtons: {
     position: "absolute",
-    bottom: 100,
+    bottom: 30,
     alignSelf: "center",
     zIndex: 30,
     flexDirection: "row",
@@ -1584,7 +1982,7 @@ const styles = StyleSheet.create({
   cropOptions: { flexDirection: "row", justifyContent: "center", gap: 8 },
   cropOption: {
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 12,
     borderRadius: 16,
     backgroundColor: "#333",
   },
@@ -1601,16 +1999,49 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   undoActions: { flexDirection: "row", gap: 28 },
-  undoText: { color: "#60a5fa", fontWeight: "700", paddingVertical: 6 },
-  deleteText: { color: "#fca5a5", fontWeight: "700", paddingVertical: 6 },
-  rotateButton: {
-    width: 55,
-    height: 55,
-    borderRadius: 27.5,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rbga(255, 255, 255, 0.5)",
+  captureAnimation: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "white",
+    zIndex: 999,
   },
+  filterRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+    marginVertical: 10,
+  },
+  filterButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "rbga(0, 0, 0, 0.6)",
+
+  },
+  filterText: {
+    color: "white",
+    fontSize: 14,
+  },
+  rotateButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "rbga(0, 0, 0, 0.6)",
+
+  },
+  metadataBadge: {
+    position: "absolute",
+    bottom: 20,
+    left: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "rbga(0, 0, 0, 0.65)",
+  },
+
+  metadataText: {
+    color: "white",
+    fontSize: 13,
+    marginVertical: 2,
+  },
+  
 });
