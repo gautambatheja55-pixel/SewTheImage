@@ -36,9 +36,8 @@
         }
       ],
       "expo-maps",
-      "@rnmapbox/maps"
+      "expo-video"
     ],
-    
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
@@ -49,9 +48,5 @@
         "projectId": "a2e44df4-1b7b-4fa4-a6c3-749187139d86"
       }
     }
-      
-      }
-
+  }
 }
-
-
