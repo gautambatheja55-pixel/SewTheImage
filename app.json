@@ -36,12 +36,7 @@
         }
       ],
       "expo-maps",
-<<<<<<< HEAD
       "expo-video"
-=======
-      "@rnmapbox/maps",
-      "expo-sharing"
->>>>>>> 93fe308 (done)
     ],
     "experiments": {
       "typedRoutes": true,
