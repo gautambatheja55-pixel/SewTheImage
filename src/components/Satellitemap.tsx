@@ -1,7 +1,13 @@
 import Mapbox from "@rnmapbox/maps";
+import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
-import {useEffect} from "react";
 
+const mapboxToken = process.env.EXPO_PUBLIC_MAPBOX_API_KEY;
+if (!mapboxToken){
+    console.error("token missing")  ;
+} else {
+    Mapbox.setAccessToken(mapboxToken);
+}
 type SatelliteMapProps = {
     latitude: number;
     longitude: number;
@@ -15,12 +21,12 @@ export default function SatelliteMap({
             console.log("satellite map mounted");
             console.log(latitude);
             console.log(longitude);
-        },[]);
+        },[latitude,longitude]);
         if (
             latitude < -90 || longitude < -180 || latitude > 90 || longitude >180
         ){
             console.log("coordinates out of range")
-            return;
+            return null;
         }
         return (
             <View style={styles.container}>
@@ -35,11 +41,15 @@ export default function SatelliteMap({
                     onDidFinishLoadingMap={()=>{
                         console.log("mapbox map finish loading");
                     }}
+                    onMapLoadingError={() => {
+                        console.log("MAPBOX MAP LOADING ERROR");
+
+                    }}
                     
                     >
                         <Mapbox.Camera
                             centerCoordinate={[longitude, latitude]}
-                            zoomLevel={16}
+                            zoomLevel={17}
                             />
 
 

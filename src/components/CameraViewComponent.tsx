@@ -1,28 +1,54 @@
+// Expo SDK 57. Install: npx expo install expo-file-system expo-print expo-video
 import { Ionicons } from "@expo/vector-icons";
-import { CameraType, CameraView } from "expo-camera";
+import {
+  CameraView,
+  useCameraPermissions,
+  useMicrophonePermissions,
+  type CameraType,
+} from "expo-camera";
+import { Directory, File, Paths } from "expo-file-system";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as MediaLibrary from "expo-media-library";
+import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
-import { useRef, useState } from "react";
+import { useVideoPlayer, VideoView } from "expo-video";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
 import {
+  ActivityIndicator,
   Alert,
-  Dimensions,
+  AppState,
   FlatList,
   Image,
+  Linking,
   Modal,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { captureRef } from "react-native-view-shot";
-import CaptureButton from "./CaptureButton";
+import SatelliteMap from "./Satellitemap";
+import WeatherDisplay from "./WeatherDisplay";
 
-const mapboxApiKey = process.env.EXPO_PUBLIC_MAPBOX_API_KEY;
-
-const { width, height } = Dimensions.get("screen");
-
+type MediaKind = "photo" | "video";
+type CaptureMode = "picture" | "video";
+type CropAspect = "original" | "square" | "fourThree";
+interface MediaItem {
+  id: string;
+  kind: MediaKind;
+  fileName: string;
+  createdAt: number;
+  width?: number;
+  height?: number;
+}
+interface GalleryStore {
+  version: 1;
+  items: MediaItem[];
+  pendingDelete: { item: MediaItem; index: number } | null;
+}
 interface CameraViewComponentProps {
   latitude: number | null;
   longitude: number | null;
@@ -31,6 +57,254 @@ interface CameraViewComponentProps {
   time: string;
   formattedAddress: string | null;
   onClose?: () => void;
+}
+
+const GALLERY_FOLDER = "sewtheimage-gallery-v1";
+const cropOptions = [
+  { value: "original", label: "Original" },
+  { value: "square", label: "Square" },
+  { value: "fourThree", label: "4:3" },
+] as const;
+const clampZoom = (value: number) => Math.max(0, Math.min(1, value));
+const newId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+const mediaFile = (item: MediaItem) =>
+  new File(Paths.document, GALLERY_FOLDER, item.fileName);
+const emptyStore = (): GalleryStore => ({
+  version: 1,
+  items: [],
+  pendingDelete: null,
+});
+
+function galleryDirectory() {
+  const directory = new Directory(Paths.document, GALLERY_FOLDER);
+  directory.create({ idempotent: true, intermediates: true });
+  return directory;
+}
+
+function isMediaItem(value: unknown): value is MediaItem {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<MediaItem>;
+  return (
+    typeof item.id === "string" &&
+    item.id.length > 0 &&
+    (item.kind === "photo" || item.kind === "video") &&
+    typeof item.createdAt === "number" &&
+    Number.isFinite(item.createdAt) &&
+    typeof item.fileName === "string" &&
+    /^(photo|video)-[a-z0-9-]+\.(jpg|jpeg|png|mp4|mov|m4v)$/i.test(
+      item.fileName,
+    )
+  );
+}
+
+function parseStore(text: string): GalleryStore {
+  const data = JSON.parse(text) as GalleryStore;
+  if (
+    !data ||
+    data.version !== 1 ||
+    !Array.isArray(data.items) ||
+    !data.items.every(isMediaItem)
+  ) {
+    throw new Error("The saved gallery index is not valid.");
+  }
+  if (
+    data.pendingDelete &&
+    (!isMediaItem(data.pendingDelete.item) ||
+      !Number.isInteger(data.pendingDelete.index) ||
+      data.pendingDelete.index < 0)
+  ) {
+    throw new Error("The saved Undo information is not valid.");
+  }
+  return { ...data, pendingDelete: data.pendingDelete ?? null };
+}
+
+// A complete temporary index replaces the live index; a backup can recover it.
+function writeStore(store: GalleryStore) {
+  const directory = galleryDirectory();
+  const index = new File(directory, "gallery.json");
+  const backup = new File(directory, "gallery.backup.json");
+  const temporary = new File(directory, `index-${newId()}.tmp`);
+  temporary.create();
+  try {
+    temporary.write(JSON.stringify(store));
+    temporary.moveSync(index, { overwrite: true });
+  } finally {
+    if (temporary.exists && temporary.uri !== index.uri) temporary.delete();
+  }
+  try {
+    index.copySync(backup, { overwrite: true });
+  } catch (error) {
+    console.warn("Gallery backup could not be updated:", error);
+  }
+}
+
+function readStore(): GalleryStore {
+  const directory = galleryDirectory();
+  const candidates = [
+    new File(directory, "gallery.json"),
+    new File(directory, "gallery.backup.json"),
+  ];
+  let foundIndex = false;
+  for (const index of candidates) {
+    if (!index.exists) continue;
+    foundIndex = true;
+    try {
+      const store = parseStore(index.textSync());
+      const items = store.items.filter((item) => mediaFile(item).exists);
+      const pendingDelete =
+        store.pendingDelete && mediaFile(store.pendingDelete.item).exists
+          ? store.pendingDelete
+          : null;
+      return { ...store, items, pendingDelete };
+    } catch (error) {
+      console.warn("Could not read gallery index:", error);
+    }
+  }
+  if (foundIndex)
+    throw new Error(
+      "The gallery could not be loaded. Existing media files have been kept.",
+    );
+  return emptyStore();
+}
+
+async function copyMedia(
+  uri: string,
+  kind: MediaKind,
+  size?: { width: number; height: number },
+): Promise<MediaItem> {
+  const id = newId();
+  const sourceExtension = uri
+    .split(/[?#]/)[0]
+    .match(/\.([a-z0-9]+)$/i)?.[1]
+    ?.toLowerCase();
+  const allowedExtensions =
+    kind === "video" ? ["mp4", "mov", "m4v"] : ["jpg", "jpeg", "png"];
+  const extension =
+    sourceExtension && allowedExtensions.includes(sourceExtension)
+      ? sourceExtension
+      : kind === "video"
+        ? "mp4"
+        : "jpg";
+  const item: MediaItem = {
+    id,
+    kind,
+    fileName: `${kind}-${id}.${extension}`,
+    createdAt: Date.now(),
+    ...size,
+  };
+  galleryDirectory();
+  await new File(uri).copy(mediaFile(item));
+  return item;
+}
+
+function removeMediaFile(item: MediaItem) {
+  // Only this app's owned media paths can be deleted, never the phone's Photos library.
+  if (!isMediaItem(item)) return;
+  try {
+    const file = mediaFile(item);
+    if (file.exists) file.delete();
+  } catch (error) {
+    console.warn("Could not remove an unused gallery file:", error);
+  }
+}
+
+function permissionMessage(title: string, message: string) {
+  Alert.alert(title, message, [
+    { text: "Cancel", style: "cancel" },
+    {
+      text: "Open Settings",
+      onPress: () => {
+        Linking.openSettings().catch(() =>
+          Alert.alert(
+            "Settings",
+            "Open your phone's Settings to allow access.",
+          ),
+        );
+      },
+    },
+  ]);
+}
+
+type IconButtonProps = ComponentProps<typeof TouchableOpacity> & {
+  icon: ComponentProps<typeof Ionicons>["name"];
+  label?: string;
+  size?: number;
+  color?: string;
+};
+function IconButton({
+  icon,
+  label,
+  size = 24,
+  color = "white",
+  disabled,
+  style,
+  accessibilityLabel,
+  ...props
+}: IconButtonProps) {
+  return (
+    <TouchableOpacity
+      {...props}
+      disabled={disabled}
+      style={[style, disabled && styles.disabled]}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
+    >
+      <Ionicons name={icon} size={size} color={color} />
+      {label && <Text style={styles.buttonText}>{label}</Text>}
+    </TouchableOpacity>
+  );
+}
+
+function PhotoDetails({
+  latitude,
+  longitude,
+  city,
+  country,
+  time,
+  formattedAddress,
+  preview = false,
+}: Omit<CameraViewComponentProps, "onClose"> & { preview?: boolean }) {
+  return (
+    <View style={preview ? styles.photoInfo : styles.locationBox}>
+      {!!city && (
+        <Text style={styles.photoTitle}>
+          {city}
+          {country ? `, ${country}` : ""}
+        </Text>
+      )}
+      {latitude !== null && longitude !== null && (
+        <Text style={styles.photoText}>
+          {preview ? `${latitude}, ${longitude}` : `${latitude}° ${longitude}°`}
+        </Text>
+      )}
+      {[time, formattedAddress].map((text, index) =>
+        text ? (
+          <Text key={index} style={styles.photoText}>
+            {text}
+          </Text>
+        ) : null,
+      )}
+    </View>
+  );
+}
+
+function GalleryVideo({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri);
+  useEffect(() => {
+    const listener = AppState.addEventListener("change", (state) => {
+      if (state !== "active") player.pause();
+    });
+    return () => listener.remove();
+  }, [player]);
+  return (
+    <VideoView
+      player={player}
+      style={styles.galleryMedia}
+      contentFit="contain"
+      nativeControls
+      fullscreenOptions={{ enable: true }}
+    />
+  );
 }
 
 export default function CameraViewComponent({
@@ -42,262 +316,426 @@ export default function CameraViewComponent({
   formattedAddress,
   onClose = () => {},
 }: CameraViewComponentProps) {
+  const { width, height } = useWindowDimensions();
   const cameraRef = useRef<CameraView | null>(null);
+  const cameraReadyRef = useRef(false);
   const compositionRef = useRef<View | null>(null);
-  const [facing, setFacing] = useState<CameraType>("back");
-  const [previewAspectRatio, setPreviewAspectRatio] = useState(3 / 4);
-  const [capturedImages, setCapturedImages] = useState<string[]>([]);
-  const [showGallery, setShowGallery] = useState(false);
-
-  const [galleryIndex, setGalleryIndex] = useState(0);
-  const [cropAspect, setCropAspect] = useState<
-    "original" | "square" | "fourThree"
-  >("square");
-  const [deletedPhoto, setDeletedPhoto] = useState<{
-    uri: string;
-    index: number;
-  } | null>(null);
-
-  const [flashMode, setFlashMode] = useState<"off" | "on" | "auto">("off");
-
-  const [showGrid, setShowGrid] = useState(false);
-  const [mediaPermission, MediaPermission] = MediaLibrary.usePermissions();
-  const [zoom, setZoom] = useState(0);
+  const galleryListRef = useRef<FlatList<MediaItem> | null>(null);
+  const mountedRef = useRef(true);
+  const busyRef = useRef(false);
+  const recordingRef = useRef(false);
+  const stoppingRef = useRef(false);
+  const recordingStarted = useRef(0);
   const pinchStartZoom = useRef(0);
-  const [showPreview, setShowPreview] = useState(false);
-  const [isCameraReady, setIsCameraReady] = useState(false);
-  const [isTakingPhoto, setIsTakingPhoto] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const storeRef = useRef<GalleryStore | null>(null);
+  const indexRef = useRef(0);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [microphonePermission, requestMicrophonePermission] =
+    useMicrophonePermissions();
+  const [store, setStore] = useState<GalleryStore | null>(null);
+  const [loadError, setLoadError] = useState("");
+  const [mode, setMode] = useState<CaptureMode>("video");
+  const [facing, setFacing] = useState<CameraType>("back");
+  const [flashMode, setFlashMode] = useState<"off" | "on" | "auto">("off");
+  const [zoom, setZoom] = useState(0);
+  const [showGrid, setShowGrid] = useState(false);
+  const [showGallery, setShowGallery] = useState(false);
+  const [previewPhoto, setPreviewPhoto] = useState<MediaItem | null>(null);
+  const [previewReady, setPreviewReady] = useState(false);
+  const [galleryIndex, setGalleryIndex] = useState(0);
+  const [cropAspect, setCropAspect] = useState<CropAspect>("square");
+  const [isCameraReady, setCameraReadyState] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [isBusy, setIsBusy] = useState(false);
+  const [status, setStatus] = useState("");
+  const [appActive, setAppActive] = useState(
+    !["inactive", "background"].includes(AppState.currentState),
+  );
+  const items = store?.items ?? [];
+  const selected = items[galleryIndex];
+  const isPhoto = selected?.kind === "photo";
+  const details = {
+    latitude,
+    longitude,
+    city,
+    country,
+    time,
+    formattedAddress,
+  };
 
-  const latestImage =
-    capturedImages.length > 0
-      ? capturedImages[capturedImages.length - 1]
-      : null;
+  const setIsCameraReady = (ready: boolean) => {
+    cameraReadyRef.current = ready;
+    if (mountedRef.current) setCameraReadyState(ready);
+  };
+  const publishStore = (next: GalleryStore) => {
+    storeRef.current = next;
+    if (mountedRef.current) setStore(next);
+  };
+  const commitStore = (next: GalleryStore) => {
+    writeStore(next);
+    publishStore(next);
+  };
+  const refreshGallery = () => {
+    try {
+      publishStore(readStore());
+      setLoadError("");
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : "Gallery could not be loaded.",
+      );
+    }
+  };
+  const selectPage = (index: number) => {
+    const next = Math.max(
+      0,
+      Math.min(index, (storeRef.current?.items.length ?? 1) - 1),
+    );
+    indexRef.current = next;
+    setGalleryIndex(next);
+  };
+  const selectedItem = () => storeRef.current?.items[indexRef.current];
 
-  const takePhoto = async () => {
-    if (!isCameraReady || !cameraRef.current || isTakingPhoto) {
+  useEffect(() => {
+    mountedRef.current = true;
+    refreshGallery();
+    const listener = AppState.addEventListener("change", (state) => {
+      if (state !== "active" && recordingRef.current && !stoppingRef.current) {
+        stoppingRef.current = true;
+        setIsStopping(true);
+        cameraRef.current?.stopRecording();
+      }
+      if (state !== "active") setIsCameraReady(false);
+      setAppActive(state === "active");
+      if (state === "active" && !busyRef.current) refreshGallery();
+    });
+    return () => {
+      mountedRef.current = false;
+      listener.remove();
+      if (recordingRef.current) cameraRef.current?.stopRecording();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isRecording) return;
+    const timer = setInterval(
+      () =>
+        setRecordingSeconds(
+          Math.floor((Date.now() - recordingStarted.current) / 1000),
+        ),
+      1000,
+    );
+    return () => clearInterval(timer);
+  }, [isRecording]);
+
+  useEffect(() => {
+    if (!showGallery || items.length === 0) return;
+    const next = Math.min(indexRef.current, items.length - 1);
+    selectPage(next);
+    const frame = requestAnimationFrame(() =>
+      galleryListRef.current?.scrollToIndex({ index: next, animated: false }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [showGallery, store, width]);
+
+  const runTask = async (label: string, task: () => Promise<void>) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setIsBusy(true);
+    setStatus(label);
+    try {
+      await task();
+    } catch (error) {
+      console.error(label, error);
+      if (mountedRef.current)
+        Alert.alert(
+          label,
+          error instanceof Error ? error.message : "Please try again.",
+        );
+    } finally {
+      busyRef.current = false;
+      if (mountedRef.current) {
+        setIsBusy(false);
+        setStatus("");
+      }
+    }
+  };
+
+  const addMedia = async (
+    uri: string,
+    kind: MediaKind,
+    size?: { width: number; height: number },
+  ) => {
+    const item = await copyMedia(uri, kind, size);
+    const current = readStore();
+    commitStore({ ...current, items: [item, ...current.items] });
+    return item;
+  };
+
+  const replacePhoto = async (
+    item: MediaItem,
+    uri: string,
+    size?: { width: number; height: number },
+  ) => {
+    const replacement = await copyMedia(uri, "photo", size);
+    const current = readStore();
+    if (!current.items.some((photo) => photo.id === item.id))
+      throw new Error("This photo is no longer in the gallery.");
+    const updated = {
+      ...item,
+      fileName: replacement.fileName,
+      ...(size ?? {}),
+    };
+    commitStore({
+      ...current,
+      items: current.items.map((photo) =>
+        photo.id === item.id ? updated : photo,
+      ),
+    });
+    removeMediaFile(item);
+    return updated;
+  };
+
+  const stopRecording = () => {
+    if (!recordingRef.current || stoppingRef.current) return;
+    stoppingRef.current = true;
+    setIsStopping(true);
+    cameraRef.current?.stopRecording();
+  };
+
+  const waitForCamera = async () => {
+    const deadline = Date.now() + 10000;
+    while (mountedRef.current) {
+      if (AppState.currentState === "background") return false;
+      if (
+        AppState.currentState === "active" &&
+        cameraReadyRef.current &&
+        cameraRef.current
+      )
+        return true;
+      if (Date.now() >= deadline)
+        throw new Error("The camera is not ready. Please try recording again.");
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    }
+    return false;
+  };
+
+  const capture = () => {
+    if (recordingRef.current) {
+      stopRecording();
       return;
     }
+    if (!isCameraReady || !cameraRef.current || !storeRef.current || loadError)
+      return;
+    void runTask(
+      mode === "video" ? "Recording video" : "Taking photo",
+      async () => {
+        if (mode === "picture") {
+          const photo = await cameraRef.current!.takePictureAsync({
+            quality: 1,
+          });
+          if (!photo?.uri)
+            throw new Error(
+              "The camera did not return a photo. Please try again.",
+            );
+          const item = await addMedia(photo.uri, "photo", {
+            width: photo.width,
+            height: photo.height,
+          });
+          if (mountedRef.current) {
+            setPreviewReady(false);
+            setPreviewPhoto(item);
+          }
+          return;
+        }
+        const permission = microphonePermission?.granted
+          ? microphonePermission
+          : await requestMicrophonePermission();
+        if (!permission.granted) {
+          permissionMessage(
+            "Microphone permission needed",
+            "Allow microphone access to record videos with sound.",
+          );
+          return;
+        }
+        if (!(await waitForCamera())) return;
+        const camera = cameraRef.current;
+        if (
+          !camera ||
+          !mountedRef.current ||
+          AppState.currentState !== "active"
+        )
+          return;
+        recordingStarted.current = Date.now();
+        recordingRef.current = true;
+        stoppingRef.current = false;
+        setRecordingSeconds(0);
+        setIsRecording(true);
+        try {
+          const video = await camera.recordAsync();
+          if (mountedRef.current) {
+            setIsRecording(false);
+            setIsStopping(false);
+            setStatus("Saving video");
+          }
+          recordingRef.current = false;
+          if (!video?.uri)
+            throw new Error("No video was recorded. Please try again.");
+          await addMedia(video.uri, "video");
+          if (mountedRef.current && AppState.currentState === "active") {
+            Alert.alert("Saved", "Video saved to the app gallery.");
+          }
+        } finally {
+          recordingRef.current = false;
+          stoppingRef.current = false;
+          if (mountedRef.current) {
+            setIsRecording(false);
+            setIsStopping(false);
+          }
+        }
+      },
+    );
+  };
 
-    try {
-      setIsTakingPhoto(true);
-
-      const photo = await cameraRef.current.takePictureAsync({
+  const finishPreview = (saveToPhone = false) => {
+    if (!previewPhoto || !previewReady || !compositionRef.current) return;
+    void runTask("Saving photo", async () => {
+      const uri = await captureRef(compositionRef.current!, {
+        format: "jpg",
         quality: 1,
       });
-
-      if (!photo?.uri) return;
-      if (photo.width && photo.height) {
-        setPreviewAspectRatio(photo.width / photo.height);
+      const size = await Image.getSize(uri);
+      const saved = await replacePhoto(previewPhoto, uri, size);
+      if (mountedRef.current) {
+        setPreviewPhoto(null);
+        setIsCameraReady(false);
       }
-      setCapturedImages((prev) => [...prev, photo.uri]);
-
-      setShowPreview(true);
-    } catch (error) {
-      console.error("Error taking photo:", error);
-    } finally {
-      setIsTakingPhoto(false);
-    }
+      if (saveToPhone) {
+        const permission = await MediaLibrary.requestPermissionsAsync(true);
+        if (!permission.granted) {
+          permissionMessage(
+            "Saved to app gallery",
+            "Allow Photos access in Settings to save a copy to your phone's Photos.",
+          );
+          return;
+        }
+        await MediaLibrary.Asset.create(mediaFile(saved).uri);
+        Alert.alert(
+          "Saved",
+          "Photo saved to the app gallery and your phone's Photos.",
+        );
+      }
+    });
   };
 
   const retakePhoto = () => {
-    setCapturedImages((prev) => prev.slice(0, -1));
-
-    setShowPreview(false);
+    if (!previewPhoto) return;
+    void runTask("Retaking photo", async () => {
+      const current = readStore();
+      commitStore({
+        ...current,
+        items: current.items.filter((item) => item.id !== previewPhoto.id),
+      });
+      removeMediaFile(previewPhoto);
+      setPreviewPhoto(null);
+      setIsCameraReady(false);
+    });
   };
 
-  const sharePhoto = async () => {
-    if (!latestImage) return;
-    try {
-      const finalImageUri = await createComposedImage();
-      if (!finalImageUri) return;
-      const sharingAvailable = await Sharing.isAvailableAsync();
-      if (!sharingAvailable) {
-        console.log("sharing not avaliable on this device ");
-        return;
+  const shareSelected = () => {
+    const item = selectedItem();
+    if (!item) return;
+    void runTask("Sharing", async () => {
+      if (!(await Sharing.isAvailableAsync()))
+        throw new Error("Sharing is not available on this device.");
+      await Sharing.shareAsync(mediaFile(item).uri);
+    });
+  };
+
+  const printSelected = () => {
+    const item = selectedItem();
+    if (!item || item.kind !== "photo") return;
+    void runTask("Printing photo", async () => {
+      const base64 = await mediaFile(item).base64();
+      const mime = item.fileName.endsWith(".png") ? "image/png" : "image/jpeg";
+      const html = `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1" />
+        <style>@page{margin:12mm}body{margin:0}img{display:block;max-width:100%;max-height:250mm;margin:auto;object-fit:contain}</style>
+        </head><body><img src="data:${mime};base64,${base64}" /></body></html>`;
+      try {
+        await Print.printAsync({ html });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!/cancel(?:led|ed)?/i.test(message)) throw error;
       }
-
-      await Sharing.shareAsync(finalImageUri);
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const createComposedImage = async () => {
-    if (!compositionRef.current) {
-      return null;
-    }
-    const finalImageUri = await captureRef(compositionRef.current, {
-      format: "jpg",
-      quality: 1,
-    });
-    return finalImageUri;
-  };
-  const galleryImages = [...capturedImages].reverse();
-  const saveComposedImage = async () => {
-    if (!latestImage || isSaving) return;
-
-    try {
-      setIsSaving(true);
-      const finalImageUri = await createComposedImage();
-      if (!finalImageUri) return;
-
-      const permission = mediaPermission?.granted
-        ? mediaPermission
-        : await MediaPermission();
-
-      if (!permission.granted) {
-        Alert.alert(
-          "Photo permission needed",
-          "Allow Photos access in Settings to save your image.",
-        );
-        return;
-      }
-
-      await MediaLibrary.createAssetAsync(finalImageUri);
-
-      setCapturedImages((prev) => [...prev.slice(0, -1), finalImageUri]);
-      setShowPreview(false);
-      Alert.alert("Saved", "Photo saved to Photos.");
-    } catch (error) {
-      console.error("Error saving image:", error);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const closePreview = async () => {
-    if (!latestImage) return;
-
-    try {
-      const finalImageUri = await createComposedImage();
-      if (!finalImageUri) return;
-
-      setCapturedImages((prev) => [...prev.slice(0, -1), finalImageUri]);
-      setShowPreview(false);
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const flipCamera = () => {
-    setFacing((current) => (current === "back" ? "front" : "back"));
-
-    setIsCameraReady(false);
-  };
-
-  const toggleFlash = () => {
-    setFlashMode((current) => {
-      if (current === "off") return "on";
-      if (current === "on") return "auto";
-
-      return "off";
     });
   };
 
-  const zoomIn = () => setZoom((current) => Math.min(1, current + 0.1));
-
-  const zoomOut = () => setZoom((current) => Math.max(0, current - 0.1));
-
-  const resetZoom = () => setZoom(0);
-
-  const zoomDisplay = zoom === 0 ? "1×" : `${(1 + zoom * 4).toFixed(1)}×`;
-
-  const pinchGesture = Gesture.Pinch()
-    .runOnJS(true)
-    .onBegin(() => {
-      pinchStartZoom.current = zoom;
-    })
-    .onUpdate((event) => {
-      const newZoom = Math.min(
-        1,
-        Math.max(0, pinchStartZoom.current + (event.scale - 1) * 0.5),
-      );
-
-      setZoom(newZoom);
-    });
-
-  const cropGalleryImage = async () => {
-    const sourceUri = galleryImages[galleryIndex];
-    if (!sourceUri) return;
-
+  const cropSelected = () => {
+    const item = selectedItem();
+    if (!item || item.kind !== "photo") return;
     if (cropAspect === "original") {
       Alert.alert("Original selected", "This photo was not cropped.");
       return;
     }
-
-    try {
-      const croppedUri = await new Promise<string>((resolve, reject) => {
-        Image.getSize(
-          sourceUri,
-          async (imageWidth, imageHeight) => {
-            try {
-              const targetRatio = cropAspect === "square" ? 1 : 4 / 3;
-              const imageRatio = imageWidth / imageHeight;
-              const cropWidth =
-                imageRatio > targetRatio
-                  ? Math.round(imageHeight * targetRatio)
-                  : imageWidth;
-              const cropHeight =
-                imageRatio > targetRatio
-                  ? imageHeight
-                  : Math.round(imageWidth / targetRatio);
-              const result = await ImageManipulator.manipulateAsync(
-                sourceUri,
-                [
-                  {
-                    crop: {
-                      originX: Math.round((imageWidth - cropWidth) / 2),
-                      originY: Math.round((imageHeight - cropHeight) / 2),
-                      width: cropWidth,
-                      height: cropHeight,
-                    },
-                  },
-                ],
-                { compress: 1, format: ImageManipulator.SaveFormat.JPEG },
-              );
-              resolve(result.uri);
-            } catch (error) {
-              reject(error);
-            }
-          },
-          reject,
-        );
+    void runTask("Cropping photo", async () => {
+      const { width: w, height: h } = await Image.getSize(mediaFile(item).uri);
+      const ratio = cropAspect === "square" ? 1 : 4 / 3;
+      const cropWidth = Math.min(w, Math.round(h * ratio));
+      const cropHeight = Math.min(h, Math.round(w / ratio));
+      const context = ImageManipulator.ImageManipulator.manipulate(
+        mediaFile(item).uri,
+      );
+      context.crop({
+        originX: Math.round((w - cropWidth) / 2),
+        originY: Math.round((h - cropHeight) / 2),
+        width: cropWidth,
+        height: cropHeight,
       });
-
-      setCapturedImages((current) => {
-        const originalIndex = current.length - 1 - galleryIndex;
-        return current.map((uri, index) =>
-          index === originalIndex ? croppedUri : uri,
-        );
-      });
-      Alert.alert("Cropped", "Photo cropped successfully.");
-    } catch (error) {
-      console.error(error);
-      Alert.alert("Crop failed", "Could not crop this photo.");
-    }
+      try {
+        const image = await context.renderAsync();
+        try {
+          const result = await image.saveAsync({
+            compress: 1,
+            format: ImageManipulator.SaveFormat.JPEG,
+          });
+          await replacePhoto(item, result.uri, {
+            width: cropWidth,
+            height: cropHeight,
+          });
+        } finally {
+          image.release();
+        }
+      } finally {
+        context.release();
+      }
+    });
   };
 
-  const deleteGalleryImage = () => {
-    const sourceUri = galleryImages[galleryIndex];
-    if (!sourceUri) return;
-
-    Alert.alert("Delete photo", "Remove this photo from the gallery?", [
+  const deleteSelected = () => {
+    const item = selectedItem();
+    if (!item || busyRef.current) return;
+    const name = item.kind === "video" ? "video" : "photo";
+    Alert.alert(`Delete ${name}`, `Remove this ${name} from the app gallery?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
         style: "destructive",
         onPress: () => {
-          setCapturedImages((current) => {
-            const originalIndex = current.length - 1 - galleryIndex;
-            const updated = current.filter(
-              (_, index) => index !== originalIndex,
+          void runTask("Deleting", async () => {
+            const current = readStore();
+            const index = current.items.findIndex(
+              (media) => media.id === item.id,
             );
-            setDeletedPhoto({ uri: sourceUri, index: originalIndex });
-            if (updated.length) {
-              setGalleryIndex(Math.min(galleryIndex, updated.length - 1));
-            }
-            return updated;
+            if (index < 0) return;
+            const previous = current.pendingDelete;
+            commitStore({
+              ...current,
+              items: current.items.filter((media) => media.id !== item.id),
+              pendingDelete: { item, index },
+            });
+            selectPage(Math.min(indexRef.current, current.items.length - 2));
+            if (previous) removeMediaFile(previous.item);
           });
         },
       },
@@ -305,124 +743,234 @@ export default function CameraViewComponent({
   };
 
   const undoDelete = () => {
-    if (!deletedPhoto) return;
-    setCapturedImages((current) => {
-      const updated = [...current];
-      updated.splice(deletedPhoto.index, 0, deletedPhoto.uri);
-      return updated;
+    void runTask("Restoring", async () => {
+      const current = readStore();
+      if (!current.pendingDelete) return;
+      const { item, index } = current.pendingDelete;
+      const restored = [...current.items];
+      restored.splice(Math.min(index, restored.length), 0, item);
+      commitStore({ ...current, items: restored, pendingDelete: null });
+      selectPage(Math.min(index, restored.length - 1));
     });
-    setDeletedPhoto(null);
+  };
+  const confirmDelete = () => {
+    void runTask("Deleting permanently", async () => {
+      const current = readStore();
+      if (!current.pendingDelete) return;
+      const item = current.pendingDelete.item;
+      commitStore({ ...current, pendingDelete: null });
+      removeMediaFile(item);
+    });
   };
 
-  const confirmDelete = () => {
-    setDeletedPhoto(null);
+  const openGallery = () => {
+    if (busyRef.current) return;
+    refreshGallery();
+    selectPage(0);
+    setIsCameraReady(false);
+    setShowGallery(true);
   };
+  const closeGallery = () => {
+    if (!busyRef.current) {
+      setShowGallery(false);
+      setIsCameraReady(false);
+    }
+  };
+  const changeMode = (next: CaptureMode) => {
+    if (busyRef.current || next === mode) return;
+    setIsCameraReady(false);
+    setMode(next);
+  };
+  const flipCamera = () => {
+    if (busyRef.current) return;
+    setIsCameraReady(false);
+    setFacing((current) => (current === "back" ? "front" : "back"));
+  };
+  const pinchGesture = Gesture.Pinch()
+    .runOnJS(true)
+    .onBegin(() => {
+      pinchStartZoom.current = zoom;
+    })
+    .onUpdate((event) =>
+      setZoom(clampZoom(pinchStartZoom.current + (event.scale - 1) * 0.5)),
+    );
+  const canCapture =
+    isCameraReady &&
+    !!store &&
+    !loadError &&
+    (!isBusy || isRecording) &&
+    !isStopping;
+  const minutes = Math.floor(recordingSeconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const seconds = (recordingSeconds % 60).toString().padStart(2, "0");
 
   return (
     <View style={styles.container}>
-      {!showPreview && (
-        <GestureDetector gesture={pinchGesture}>
-          <CameraView
-            ref={cameraRef}
-            style={styles.camera}
-            facing={facing}
-            zoom={zoom}
-            enableTorch={flashMode === "on"}
-            onCameraReady={() => setIsCameraReady(true)}
-            onMountError={(error) => {
-              console.log("Camera error:", error);
-
-              setIsCameraReady(false);
-            }}
-          />
-        </GestureDetector>
-      )}
-
-      {showGrid && !showPreview && (
-        <View pointerEvents="none" style={styles.gridContainer}>
-          <View style={[styles.gridVertical, { left: "33.33%" }]} />
-
-          <View style={[styles.gridVertical, { left: "66.66%" }]} />
-
-          <View style={[styles.gridHorizontal, { top: "33.33%" }]} />
-
-          <View style={[styles.gridHorizontal, { top: "66.66%" }]} />
-        </View>
-      )}
-
-      {!showPreview && (
-        <View style={styles.topControls}>
-          <TouchableOpacity style={styles.roundButton} onPress={onClose}>
-            <Ionicons name="close" size={27} color="white" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.roundButton}
-            onPress={() => setShowGrid((current) => !current)}
-          >
-            <Ionicons
-              name="grid-outline"
-              size={23}
-              color={showGrid ? "#FFD700" : "white"}
+      {!previewPhoto &&
+        !showGallery &&
+        (appActive || isRecording) &&
+        cameraPermission?.granted && (
+          <GestureDetector gesture={pinchGesture}>
+            <CameraView
+              key={`${mode}-${facing}`}
+              ref={cameraRef}
+              style={styles.camera}
+              mode={mode}
+              facing={facing}
+              zoom={zoom}
+              flash={flashMode}
+              enableTorch={mode === "video" && flashMode === "on"}
+              mute={false}
+              videoQuality="1080p"
+              onCameraReady={() => setIsCameraReady(true)}
+              onMountError={(error) => {
+                setIsCameraReady(false);
+                Alert.alert("Camera error", error.message);
+              }}
             />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {!showPreview && (
-        <View style={styles.zoomContainer}>
-          <TouchableOpacity style={styles.zoomButton} onPress={zoomOut}>
-            <Ionicons name="remove" size={22} color="white" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.zoomTextButton} onPress={resetZoom}>
-            <Text style={styles.zoomText}>{zoomDisplay}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.zoomButton} onPress={zoomIn}>
-            <Ionicons name="add" size={22} color="white" />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {!showPreview && (
-        <View style={styles.locationBox}>
-          {!!city && (
-            <Text style={styles.photoTitle}>
-              {city}
-              {country ? `, ${country}` : ""}
+          </GestureDetector>
+        )}
+      {!previewPhoto && !showGallery && (
+        <>
+          {appActive &&
+            cameraPermission?.granted &&
+            latitude !== null &&
+            longitude !== null && (
+              <>
+                <SatelliteMap latitude={latitude} longitude={longitude} />
+                <WeatherDisplay latitude={latitude} longitude={longitude} />
+              </>
+            )}
+          {!cameraPermission?.granted && (
+            <View style={styles.permissionBox}>
+              <Text style={styles.heading}>Camera permission needed</Text>
+              <Text style={styles.message}>
+                Allow the camera to take photos and record videos.
+              </Text>
+              <IconButton
+                icon="camera-outline"
+                label="Allow camera"
+                style={styles.blueButton}
+                onPress={() => {
+                  if (cameraPermission?.canAskAgain === false)
+                    permissionMessage(
+                      "Camera permission",
+                      "Allow Camera in Settings.",
+                    );
+                  else
+                    requestCameraPermission().catch(() =>
+                      permissionMessage(
+                        "Camera permission",
+                        "Allow Camera in Settings.",
+                      ),
+                    );
+                }}
+              />
+            </View>
+          )}
+          {showGrid && cameraPermission?.granted && (
+            <View pointerEvents="none" style={styles.gridContainer}>
+              <View style={[styles.gridVertical, { left: "33.33%" }]} />
+              <View style={[styles.gridVertical, { left: "66.66%" }]} />
+              <View style={[styles.gridHorizontal, { top: "33.33%" }]} />
+              <View style={[styles.gridHorizontal, { top: "66.66%" }]} />
+            </View>
+          )}
+          <View style={styles.topControls}>
+            <IconButton
+              icon="close"
+              size={27}
+              style={styles.roundButton}
+              disabled={isBusy}
+              accessibilityLabel="Close camera"
+              onPress={onClose}
+            />
+            <IconButton
+              icon="grid-outline"
+              size={23}
+              style={styles.roundButton}
+              color={showGrid ? "#FFD700" : "white"}
+              accessibilityLabel="Toggle camera grid"
+              onPress={() => setShowGrid((current) => !current)}
+            />
+          </View>
+          <View style={styles.zoomContainer}>
+            <IconButton
+              icon="remove"
+              size={22}
+              style={styles.zoomButton}
+              accessibilityLabel="Zoom out"
+              onPress={() => setZoom((current) => clampZoom(current - 0.1))}
+            />
+            <TouchableOpacity
+              style={styles.zoomTextButton}
+              onPress={() => setZoom(0)}
+              accessibilityLabel="Reset zoom"
+            >
+              <Text style={styles.zoomText}>
+                {zoom === 0 ? "1×" : `${(1 + zoom * 4).toFixed(1)}×`}
+              </Text>
+            </TouchableOpacity>
+            <IconButton
+              icon="add"
+              size={22}
+              style={styles.zoomButton}
+              accessibilityLabel="Zoom in"
+              onPress={() => setZoom((current) => clampZoom(current + 0.1))}
+            />
+          </View>
+          {isRecording && (
+            <Text style={styles.recordingBadge}>
+              ● REC {minutes}:{seconds}
+              {isStopping ? " · Stopping" : ""}
             </Text>
           )}
-
-          {latitude !== null && longitude !== null && (
-            <Text style={styles.photoText}>
-              {latitude}° {longitude}°
-            </Text>
+          {!!loadError && (
+            <View style={styles.errorBox}>
+              <Text style={styles.message}>{loadError}</Text>
+              <IconButton
+                icon="refresh"
+                label="Retry gallery"
+                style={styles.blueButton}
+                onPress={refreshGallery}
+              />
+            </View>
           )}
-
-          {!!time && <Text style={styles.locationText}>{time}</Text>}
-
-          {!!formattedAddress && (
-            <Text style={styles.locationText}>{formattedAddress}</Text>
+          {!store && !loadError && (
+            <View style={styles.loadingBox}>
+              <ActivityIndicator color="white" />
+              <Text style={styles.message}>Loading gallery…</Text>
+            </View>
           )}
-        </View>
-      )}
-
-      {!showPreview && (
-        <View style={styles.controls}>
-          <TouchableOpacity
-            style={styles.controlButton}
-            onPress={() => {
-              setGalleryIndex(0);
-              setShowGallery(true);
-            }}
-          >
-            <Ionicons name="images" size={27} color="white" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.controlButton} onPress={toggleFlash}>
-            <Ionicons
-              name={
+          {cameraPermission?.granted && <PhotoDetails {...details} />}
+          <View style={styles.modeSelector}>
+            {(["picture", "video"] as const).map((value) => (
+              <TouchableOpacity
+                key={value}
+                disabled={isBusy}
+                onPress={() => changeMode(value)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: mode === value }}
+                style={[styles.modeOption, mode === value && styles.activeMode]}
+              >
+                <Text style={styles.modeText}>
+                  {value === "picture" ? "Photo" : "Video"}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <View style={styles.controls}>
+            <IconButton
+              icon="images"
+              size={27}
+              style={styles.controlButton}
+              onPress={openGallery}
+              accessibilityLabel={`Open gallery, ${items.length} items`}
+              disabled={isBusy}
+            />
+            <IconButton
+              icon={
                 flashMode === "on"
                   ? "flash"
                   : flashMode === "auto"
@@ -431,86 +979,105 @@ export default function CameraViewComponent({
               }
               size={27}
               color={flashMode === "auto" ? "#FFD700" : "white"}
+              style={styles.controlButton}
+              disabled={isBusy}
+              accessibilityLabel={`Flash ${flashMode}`}
+              onPress={() =>
+                setFlashMode((current) =>
+                  current === "off" ? "on" : current === "on" ? "auto" : "off",
+                )
+              }
             />
-          </TouchableOpacity>
-
-          <CaptureButton onPress={takePhoto} />
-
-          <TouchableOpacity style={styles.controlButton} onPress={flipCamera}>
-            <Ionicons name="camera-reverse" size={29} color="white" />
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              onPress={capture}
+              disabled={!canCapture}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isRecording
+                  ? "Stop recording"
+                  : mode === "video"
+                    ? "Start recording video"
+                    : "Take photo"
+              }
+              style={[styles.captureButton, !canCapture && styles.disabled]}
+            >
+              <View
+                style={[
+                  styles.captureInner,
+                  mode === "video" && styles.videoCapture,
+                  isRecording && styles.recordingStop,
+                ]}
+              />
+            </TouchableOpacity>
+            <IconButton
+              icon="camera-reverse"
+              size={29}
+              style={styles.controlButton}
+              onPress={flipCamera}
+              disabled={isBusy}
+              accessibilityLabel="Switch front and back camera"
+            />
+          </View>
+        </>
       )}
-
-      {showPreview && latestImage && (
-        <View style={styles.preview}>
+      {previewPhoto && (
+        <View style={[styles.preview, { width, height }]}>
           <View
             ref={compositionRef}
             collapsable={false}
             style={styles.composition}
           >
             <Image
-              source={{ uri: latestImage }}
-              style={[styles.previewImage, { aspectRatio: previewAspectRatio }]}
+              source={{ uri: mediaFile(previewPhoto).uri }}
+              style={[
+                styles.previewImage,
+                {
+                  aspectRatio:
+                    (previewPhoto.width ?? 3) / (previewPhoto.height ?? 4),
+                },
+              ]}
+              onLoad={() => setPreviewReady(true)}
+              onError={() =>
+                Alert.alert(
+                  "Preview error",
+                  "The photo is still saved in the app gallery.",
+                )
+              }
             />
-            <View style={styles.photoInfo}>
-              {!!city && (
-                <Text style={styles.photoTitle}>
-                  {city}
-                  {country ? `, ${country}` : ""}
-                </Text>
-              )}
-
-              {latitude !== null && longitude !== null && (
-                <>
-                  <Text style={styles.photoText}>
-                    {latitude}, {longitude}
-                  </Text>
-                </>
-              )}
-
-              {!!time && <Text style={styles.photoText}>{time}</Text>}
-
-              {!!formattedAddress && (
-                <Text style={styles.photoText}>{formattedAddress}</Text>
-              )}
-            </View>
+            <PhotoDetails {...details} preview />
           </View>
-
-          <View style={styles.previewTop}>
-            <TouchableOpacity
+          <View style={[styles.topControls, styles.previewControls]}>
+            <IconButton
+              icon="close"
+              size={25}
+              label="Close"
               style={styles.previewButton}
-              onPress={closePreview}
-            >
-              <Ionicons name="close" size={25} color="white" />
-
-              <Text style={styles.buttonText}>Close</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
+              disabled={isBusy || !previewReady}
+              onPress={() => finishPreview()}
+            />
+            <IconButton
+              icon="download-outline"
+              label="Save"
               style={styles.previewButton}
-              onPress={saveComposedImage}
-              disabled={isSaving}
-            >
-              <Ionicons name="download-outline" size={24} color="white" />
-
-              <Text style={styles.buttonText}>
-                {isSaving ? "Saving..." : "Save"}
-              </Text>
-            </TouchableOpacity>
+              disabled={isBusy || !previewReady}
+              onPress={() => finishPreview(true)}
+            />
           </View>
-
           <View style={styles.bottomButtons}>
-            <TouchableOpacity style={styles.retakeButton} onPress={sharePhoto}>
-              <Ionicons name="share-outline" size={24} color="white" />
-
-              <Text style={styles.buttonText}>Share</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.retakeButton} onPress={retakePhoto}>
-              <Ionicons name="camera-reverse-outline" size={24} color="white" />
-              <Text style={styles.buttonText}>Retake</Text>
-            </TouchableOpacity>
+            <IconButton
+              icon="camera-reverse-outline"
+              label="Retake"
+              style={styles.previewButton}
+              disabled={isBusy}
+              onPress={retakePhoto}
+            />
           </View>
+        </View>
+      )}
+      {isBusy && !isRecording && (
+        <View style={styles.busyBadge}>
+          <ActivityIndicator color="white" />
+          <Text style={styles.buttonText}>{status}…</Text>
         </View>
       )}
 
@@ -519,155 +1086,235 @@ export default function CameraViewComponent({
         animationType="slide"
         presentationStyle="fullScreen"
         statusBarTranslucent
-        onRequestClose={() => setShowGallery(false)}
+        onRequestClose={closeGallery}
       >
-        <View style={styles.gallery}>
-          <TouchableOpacity
-            style={styles.galleryClose}
-            onPress={() => setShowGallery(false)}
-          >
-            <Ionicons name="close" size={32} color="white" />
-          </TouchableOpacity>
-
-          {galleryImages.length === 0 ? (
-            <View style={styles.emptyGallery}>
-              <Ionicons name="images-outline" size={48} color="#9ca3af" />
-              <Text style={styles.emptyGalleryTitle}>No photos yet</Text>
-              <Text style={styles.emptyGalleryText}>
-                Take your first photo to see it here.
-              </Text>
+        {showGallery && (
+          <View style={styles.container}>
+            <View style={styles.galleryHeader}>
+              <View>
+                <Text style={styles.heading}>Gallery</Text>
+                <Text style={styles.muted}>
+                  {items.length
+                    ? `${galleryIndex + 1} of ${items.length} · ${isPhoto ? "Photo" : "Video"}`
+                    : "No items"}
+                </Text>
+              </View>
+              <IconButton
+                icon="close"
+                size={30}
+                style={styles.roundButton}
+                onPress={closeGallery}
+                disabled={isBusy}
+                accessibilityLabel="Close gallery"
+              />
             </View>
-          ) : (
-            <FlatList
-              data={galleryImages}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onMomentumScrollEnd={(event) =>
-                setGalleryIndex(
-                  Math.round(event.nativeEvent.contentOffset.x / width),
-                )
-              }
-              keyExtractor={(_, index) => index.toString()}
-              renderItem={({ item }) => (
-                <View style={styles.page}>
-                  <Image source={{ uri: item }} style={styles.galleryImage} />
+            <View style={styles.galleryBody}>
+              {items.length ? (
+                <FlatList
+                  ref={galleryListRef}
+                  style={styles.galleryBody}
+                  data={items}
+                  extraData={galleryIndex}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  keyExtractor={(item) => item.id}
+                  initialNumToRender={2}
+                  windowSize={3}
+                  scrollEventThrottle={16}
+                  scrollEnabled={!isBusy}
+                  onScroll={(event) =>
+                    selectPage(
+                      Math.round(event.nativeEvent.contentOffset.x / width),
+                    )
+                  }
+                  getItemLayout={(_, index) => ({
+                    length: width,
+                    offset: width * index,
+                    index,
+                  })}
+                  renderItem={({ item, index }) => (
+                    <View style={[styles.page, { width }]}>
+                      {item.kind === "photo" ? (
+                        <Image
+                          source={{ uri: mediaFile(item).uri }}
+                          style={styles.galleryMedia}
+                          resizeMode="contain"
+                        />
+                      ) : index === galleryIndex ? (
+                        <GalleryVideo
+                          key={item.fileName}
+                          uri={mediaFile(item).uri}
+                        />
+                      ) : (
+                        <Ionicons
+                          name="videocam-outline"
+                          size={60}
+                          color="white"
+                        />
+                      )}
+                    </View>
+                  )}
+                />
+              ) : (
+                <View style={styles.emptyGallery}>
+                  <Ionicons name="images-outline" size={48} color="#9ca3af" />
+                  <Text style={styles.heading}>
+                    {loadError
+                      ? "Gallery unavailable"
+                      : "No photos or videos yet"}
+                  </Text>
+                  <Text style={styles.message}>
+                    {loadError || "Take a photo or record your first video."}
+                  </Text>
                 </View>
               )}
-              getItemLayout={(_, index) => ({
-                length: width,
-                offset: width * index,
-                index,
-              })}
-            />
-          )}
-
-          {galleryImages.length > 0 && (
-            <View style={styles.galleryActions}>
-              <View style={styles.cropOptions}>
-                {(["original", "square", "fourThree"] as const).map(
-                  (option) => (
+            </View>
+            <View style={styles.galleryFooter}>
+              {store?.pendingDelete && (
+                <View style={styles.undoBar}>
+                  <Text style={styles.photoText}>
+                    {store.pendingDelete.item.kind === "video"
+                      ? "Video deleted"
+                      : "Photo deleted"}
+                  </Text>
+                  <View style={styles.undoActions}>
                     <TouchableOpacity
-                      key={option}
-                      style={[
-                        styles.cropOption,
-                        cropAspect === option && styles.cropOptionActive,
-                      ]}
-                      onPress={() => setCropAspect(option)}
+                      disabled={isBusy}
+                      onPress={undoDelete}
+                      accessibilityLabel="Undo deletion"
                     >
-                      <Text style={styles.cropOptionText}>
-                        {option === "original"
-                          ? "Original"
-                          : option === "square"
-                            ? "Square"
-                            : "4:3"}
-                      </Text>
+                      <Text style={styles.undoText}>Undo</Text>
                     </TouchableOpacity>
-                  ),
-                )}
-              </View>
-              <TouchableOpacity
-                style={styles.galleryCropButton}
-                onPress={cropGalleryImage}
-              >
-                <Ionicons name="crop-outline" size={24} color="white" />
-                <Text style={styles.buttonText}>Crop</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.galleryDeleteButton}
-                onPress={deleteGalleryImage}
-              >
-                <Ionicons name="trash-outline" size={24} color="white" />
-                <Text style={styles.buttonText}>Delete</Text>
-              </TouchableOpacity>
+                    <TouchableOpacity
+                      disabled={isBusy}
+                      onPress={confirmDelete}
+                      accessibilityLabel="Keep media deleted"
+                    >
+                      <Text style={styles.deleteText}>Delete</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+              {items.length > 0 && (
+                <>
+                  {isPhoto ? (
+                    <View style={styles.cropOptions}>
+                      {cropOptions.map(({ value, label }) => (
+                        <TouchableOpacity
+                          key={value}
+                          disabled={isBusy}
+                          onPress={() => setCropAspect(value)}
+                          style={[
+                            styles.cropOption,
+                            cropAspect === value && styles.activeMode,
+                          ]}
+                        >
+                          <Text style={styles.modeText}>{label}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.muted}>
+                      Use Play above. Crop and Print are available for photos.
+                    </Text>
+                  )}
+                  <View style={styles.actionRow}>
+                    <IconButton
+                      icon="crop-outline"
+                      label="Crop"
+                      style={[styles.galleryButton, styles.blue]}
+                      disabled={isBusy || !isPhoto}
+                      onPress={cropSelected}
+                    />
+                    <IconButton
+                      icon="share-outline"
+                      label="Share"
+                      style={[styles.galleryButton, styles.green]}
+                      disabled={isBusy}
+                      onPress={shareSelected}
+                    />
+                  </View>
+                  <View style={styles.actionRow}>
+                    <IconButton
+                      icon="print-outline"
+                      label="Print"
+                      style={[styles.galleryButton, styles.purple]}
+                      disabled={isBusy || !isPhoto}
+                      onPress={printSelected}
+                    />
+                    <IconButton
+                      icon="trash-outline"
+                      label="Delete"
+                      style={[styles.galleryButton, styles.red]}
+                      disabled={isBusy}
+                      onPress={deleteSelected}
+                    />
+                  </View>
+                </>
+              )}
+              {isBusy && (
+                <View style={styles.actionRow}>
+                  <ActivityIndicator color="white" />
+                  <Text style={styles.photoText}>{status}…</Text>
+                </View>
+              )}
             </View>
-          )}
-
-          {deletedPhoto && (
-            <View style={styles.undoBar}>
-              <Text style={styles.undoText}>Photo deleted</Text>
-              <View style={styles.undoActions}>
-                <TouchableOpacity
-                  accessibilityLabel="Restore deleted photo"
-                  onPress={undoDelete}
-                >
-                  <Text style={styles.undoButton}>Undo</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  accessibilityLabel="Keep photo deleted"
-                  onPress={confirmDelete}
-                >
-                  <Text style={styles.confirmDeleteButton}>Delete</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        </View>
+          </View>
+        )}
       </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "black",
+  container: { flex: 1, backgroundColor: "black" },
+  camera: { flex: 1 },
+  disabled: { opacity: 0.4 },
+  blue: { backgroundColor: "#1677ff" },
+  green: { backgroundColor: "#15803d" },
+  purple: { backgroundColor: "#6d28d9" },
+  red: { backgroundColor: "#b00020" },
+  heading: {
+    color: "white",
+    fontSize: 20,
+    fontWeight: "700",
+    marginVertical: 6,
   },
-
-  camera: {
-    flex: 1,
+  muted: { color: "#b9c0cc", fontSize: 13, textAlign: "center" },
+  message: {
+    color: "white",
+    fontSize: 15,
+    textAlign: "center",
+    marginVertical: 10,
   },
-
-  composition: {
-    width: "100%",
+  buttonText: {
+    color: "white",
+    fontSize: 15,
+    fontWeight: "600",
+    marginLeft: 6,
+  },
+  photoTitle: {
+    color: "white",
+    fontSize: 17,
+    fontWeight: "700",
+    marginBottom: 5,
+  },
+  photoText: { color: "white", fontSize: 14, marginBottom: 3 },
+  permissionBox: {
     flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 32,
+  },
+  blueButton: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    transform: [{ translateY: -60 }],
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#1677ff",
   },
-
-  gridContainer: {
-    ...StyleSheet.absoluteFill,
-    zIndex: 2,
-  },
-
-  gridVertical: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    width: 1,
-    backgroundColor: "rgba(255,255,255,0.45)",
-  },
-
-  gridHorizontal: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.45)",
-  },
-
   topControls: {
     position: "absolute",
     top: 50,
@@ -677,7 +1324,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
-
   roundButton: {
     width: 46,
     height: 46,
@@ -686,7 +1332,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.55)",
   },
-
   zoomContainer: {
     position: "absolute",
     top: 50,
@@ -698,51 +1343,59 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     backgroundColor: "rgba(0,0,0,0.55)",
   },
-
   zoomButton: {
     width: 40,
     height: 40,
     alignItems: "center",
     justifyContent: "center",
   },
-
   zoomTextButton: {
     minWidth: 55,
     height: 40,
     alignItems: "center",
     justifyContent: "center",
   },
-
-  zoomText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "700",
+  zoomText: { color: "white", fontSize: 16, fontWeight: "700" },
+  gridContainer: { ...StyleSheet.absoluteFill, zIndex: 2 },
+  gridVertical: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 1,
+    backgroundColor: "rgba(255,255,255,0.45)",
   },
-
+  gridHorizontal: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.45)",
+  },
   locationBox: {
     position: "absolute",
     left: 20,
     right: 20,
-    bottom: 120,
+    bottom: 185,
     zIndex: 8,
-    padding: 14,
+    padding: 12,
     borderRadius: 12,
     backgroundColor: "rgba(0,0,0,0.5)",
   },
-
-  locationText: {
-    color: "white",
-    fontSize: 14,
-    marginBottom: 2,
+  modeSelector: {
+    position: "absolute",
+    bottom: 124,
+    alignSelf: "center",
+    flexDirection: "row",
+    gap: 8,
   },
-
-  locationCity: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "700",
-    marginBottom: 3,
+  modeOption: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 22,
+    backgroundColor: "#333",
   },
-
+  modeText: { color: "white", fontSize: 14, fontWeight: "600" },
+  activeMode: { backgroundColor: "#1677ff" },
   controls: {
     position: "absolute",
     bottom: 35,
@@ -752,33 +1405,80 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-around",
     alignItems: "center",
-    paddingHorizontal: 20,
+    paddingHorizontal: 12,
   },
-
   controlButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.4)",
   },
-
+  captureButton: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 4,
+    borderColor: "white",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  captureInner: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "white",
+  },
+  videoCapture: { backgroundColor: "#ef4444" },
+  recordingStop: { width: 30, height: 30, borderRadius: 5 },
+  recordingBadge: {
+    position: "absolute",
+    top: 110,
+    alignSelf: "center",
+    backgroundColor: "#991b1b",
+    color: "white",
+    fontWeight: "700",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  loadingBox: { position: "absolute", top: "40%", alignSelf: "center" },
+  errorBox: {
+    position: "absolute",
+    top: 150,
+    left: 24,
+    right: 24,
+    padding: 16,
+    backgroundColor: "#333",
+    borderRadius: 12,
+  },
+  busyBadge: {
+    position: "absolute",
+    top: 110,
+    alignSelf: "center",
+    zIndex: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: "rgba(0,0,0,0.8)",
+  },
   preview: {
     position: "absolute",
-    width,
-    height,
     backgroundColor: "black",
     zIndex: 20,
     alignItems: "center",
     justifyContent: "center",
   },
-
-  previewImage: {
+  composition: {
     width: "100%",
-    resizeMode: "contain",
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    transform: [{ translateY: -60 }],
   },
-
+  previewImage: { width: "100%", resizeMode: "contain" },
   photoInfo: {
     position: "absolute",
     bottom: 190,
@@ -788,39 +1488,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: "rgba(0,0,0,0.55)",
   },
-
-  bottomButtons: {
-    position: "absolute",
-    bottom: 150,
-    alignSelf: "center",
-    zIndex: 30,
-    flexDirection: "row",
-    gap: 12,
-  },
-
-  photoTitle: {
-    color: "white",
-    fontSize: 17,
-    fontWeight: "700",
-    marginBottom: 5,
-  },
-
-  photoText: {
-    color: "white",
-    fontSize: 14,
-    marginBottom: 3,
-  },
-
-  previewTop: {
-    position: "absolute",
-    top: 50,
-    left: 16,
-    right: 16,
-    zIndex: 30,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-
+  previewControls: { zIndex: 30 },
   previewButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -829,159 +1497,65 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     backgroundColor: "rgba(0,0,0,0.6)",
   },
-
-  buttonText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "600",
-    marginLeft: 6,
-  },
-
-  retakeButton: {
+  bottomButtons: {
+    position: "absolute",
+    bottom: 100,
+    alignSelf: "center",
+    zIndex: 30,
     flexDirection: "row",
-    alignItems: "center",
+  },
+  galleryHeader: {
+    paddingTop: Platform.OS === "ios" ? 52 : 36,
+    paddingBottom: 12,
     paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 26,
-    backgroundColor: "rgba(0,0,0,0.65)",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-
-  gallery: {
+  galleryBody: { flex: 1 },
+  page: { height: "100%", alignItems: "center", justifyContent: "center" },
+  galleryMedia: { width: "100%", height: "100%" },
+  galleryFooter: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === "ios" ? 40 : 24,
+    gap: 10,
+  },
+  galleryButton: {
     flex: 1,
-    backgroundColor: "black",
-  },
-
-  galleryClose: {
-    position: "absolute",
-    top: 50,
-    right: 20,
-    zIndex: 20,
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.55)",
-  },
-
-  page: {
-    width,
-    height,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  galleryImage: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "contain",
-  },
-
-  galleryActions: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 45,
-    zIndex: 20,
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 14,
-  },
-
-  galleryCropButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 18,
+    justifyContent: "center",
+    paddingHorizontal: 12,
     paddingVertical: 12,
     borderRadius: 24,
-    backgroundColor: "#1677ff",
   },
-
-  galleryDeleteButton: {
+  actionRow: {
     flexDirection: "row",
+    justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 24,
-    backgroundColor: "#b00020",
+    gap: 10,
   },
-
+  cropOptions: { flexDirection: "row", justifyContent: "center", gap: 8 },
+  cropOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: "#333",
+  },
   emptyGallery: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    padding: 32,
+    padding: 24,
   },
-
-  emptyGalleryTitle: {
-    color: "white",
-    fontSize: 20,
-    fontWeight: "700",
-    marginTop: 14,
-  },
-
-  emptyGalleryText: {
-    color: "#d1d5db",
-    textAlign: "center",
-    marginTop: 8,
-  },
-
-  cropOptions: {
-    flexDirection: "row",
-    gap: 8,
-    position: "absolute",
-    bottom: 62,
-    alignSelf: "center",
-  },
-
-  cropOption: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 16,
-    backgroundColor: "rgba(0,0,0,.65)",
-  },
-
-  cropOptionActive: {
-    backgroundColor: "#1677ff",
-  },
-
-  cropOptionText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-
   undoBar: {
-    position: "absolute",
-    left: 20,
-    right: 20,
-    bottom: 180,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    padding: 14,
     borderRadius: 12,
     backgroundColor: "#262626",
+    gap: 8,
   },
-
-  undoText: {
-    color: "white",
-  },
-
-  undoButton: {
-    color: "#60a5fa",
-    fontWeight: "700",
-  },
-
-  undoActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 18,
-  },
-
-  confirmDeleteButton: {
-    color: "#fca5a5",
-    fontWeight: "700",
-  },
+  undoActions: { flexDirection: "row", gap: 28 },
+  undoText: { color: "#60a5fa", fontWeight: "700", paddingVertical: 6 },
+  deleteText: { color: "#fca5a5", fontWeight: "700", paddingVertical: 6 },
 });
