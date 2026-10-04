@@ -16,7 +16,6 @@ import {
   useRef,
   useState,
   type ComponentProps,
-  type ComponentType,
 } from "react";
 import {
   ActivityIndicator,
@@ -36,23 +35,7 @@ import {
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { captureRef } from "react-native-view-shot";
 import WeatherDisplay from "./WeatherDisplay";
-
-const SatelliteMap = (() => {
-  try {
-    return require("./Satellitemap").default as ComponentType<{
-      latitude: number;
-      longitude: number;
-    }>;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (
-      message.includes("@rnmapbox/maps") &&
-      message.includes("native code not available")
-    )
-      return null;
-    throw error;
-  }
-})();
+import SatelliteMap from "./Satellitemap";
 
 type MediaKind = "photo" | "video";
 type CaptureMode = "picture" | "video";
@@ -1597,11 +1580,11 @@ const styles = StyleSheet.create({
   },
   photoTitle: {
     color: "white",
-    fontSize: 17,
+    fontSize: 12,
     fontWeight: "700",
-    marginBottom: 5,
+    marginBottom: 2,
   },
-  photoText: { color: "white", fontSize: 14, marginBottom: 3 },
+  photoText: { color: "white", fontSize: 10, marginBottom: 1},
   permissionBox: {
     flex: 1,
     justifyContent: "center",
@@ -1683,10 +1666,11 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 20,
     right: 20,
-    bottom: 185,
+    padding:6,
+    width:"53%",
+    bottom: "30%",
     zIndex: 8,
-    padding: 12,
-    borderRadius: 12,
+    borderRadius: 8,
     backgroundColor: "rgba(0,0,0,0.5)",
   },
   modeSelector: {
