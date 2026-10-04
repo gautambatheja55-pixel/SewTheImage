@@ -150,6 +150,7 @@ function parseStore(text: string): GalleryStore {
   }
   return { ...data, pendingDelete: data.pendingDelete ?? null };
 }
+
 function writeStore(store: GalleryStore) {
   const directory = galleryDirectory();
   const index = new File(directory, "gallery.json");
@@ -1039,16 +1040,11 @@ export default function CameraViewComponent({
         cameraPermission?.granted && (
           <GestureDetector gesture={pinchGesture}>
             <CameraView
-              key={`${mode}-${facing}`}
               ref={cameraRef}
               style={styles.camera}
               mode={mode}
               facing={facing}
               zoom={zoom}
-              flash={flashMode}
-              enableTorch={mode === "video" && flashMode === "on"}
-              mute={false}
-              videoQuality="1080p"
               onCameraReady={() => setIsCameraReady(true)}
               onMountError={(error) => {
                 setIsCameraReady(false);
