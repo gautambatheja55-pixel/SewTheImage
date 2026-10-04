@@ -1,5 +1,6 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import { useState } from "react";
 import { useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
@@ -10,6 +11,7 @@ SplashScreen.preventAutoHideAsync();
 
 export default function TabLayout() {
     const colorScheme = useColorScheme();
+    const [isTabBarHidden, setIsTabBarHidden] = useState(false);
 
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>
@@ -21,7 +23,9 @@ export default function TabLayout() {
                 }
             >
                 <AnimatedSplashOverlay />
-                <AppTabs />
+                <TabBarContext.Provider value={{ setIsTabBarHidden }}>
+                    <AppTabs hidden={isTabBarHidden} />
+                </TabBarContext.Provider>
             </ThemeProvider>
         </GestureHandlerRootView>
     );

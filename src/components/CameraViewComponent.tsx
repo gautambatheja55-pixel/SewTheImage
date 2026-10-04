@@ -712,6 +712,40 @@ export default function CameraViewComponent({
     });
   };
 
+  const rotateSelected = () => {
+    const item = selectedItem();
+
+    if (!item || item.kind !== "photo") return;
+
+    void runTask("Rotating photo", async () => {
+      const context = ImageManipulator.ImageManipulator.manipulate(
+        mediaFile(item).uri
+      );
+      context.rotate(90);
+
+      try {
+         const image = await context.renderAsync();
+
+         try {
+          const result = await image.saveAsync({
+        compress: 1,
+        format: ImageManipulator.SaveFormat.JPEG,
+      });
+      await replacePhoto(item, result.uri, {
+        width: result.width,
+        height: result.height,
+      });
+    } finally {
+      image.release();
+    }
+
+  } finally {
+    context.release();
+  }
+});
+
+};
+
   const deleteSelected = () => {
     const item = selectedItem();
     if (!item || busyRef.current) return;
@@ -1250,6 +1284,17 @@ export default function CameraViewComponent({
                       disabled={isBusy}
                       onPress={deleteSelected}
                     />
+
+                    <TouchableOpacity
+                      style={styles.rotateButton}
+                      onPress={rotateSelected}
+                      >
+                        <Ionicons
+                          name="refresh-outline"
+                          size={27}
+                          color="white"
+                          />
+                      </TouchableOpacity>
                   </View>
                 </>
               )}
@@ -1558,4 +1603,14 @@ const styles = StyleSheet.create({
   undoActions: { flexDirection: "row", gap: 28 },
   undoText: { color: "#60a5fa", fontWeight: "700", paddingVertical: 6 },
   deleteText: { color: "#fca5a5", fontWeight: "700", paddingVertical: 6 },
+  rotateButton: {
+    width: 55,
+    height: 55,
+    borderRadius: 27.5,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rbga(255, 255, 255, 0.5)",
+  },
 });

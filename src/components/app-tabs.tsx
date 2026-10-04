@@ -3,12 +3,13 @@ import { useColorScheme } from 'react-native';
 
 import { Colors } from '@/constants/theme';
 
-export default function AppTabs() {
+export default function AppTabs({ hidden = false }: { hidden?: boolean }) {
   const scheme = useColorScheme();
   const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
 
   return (
     <NativeTabs
+    hidden={hidden}
       backgroundColor={colors.background}
       indicatorColor={colors.backgroundElement}
       labelStyle={{ selected: { color: colors.text } }}>

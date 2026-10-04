@@ -5,6 +5,8 @@
   "dependencies": {
     "@expo/ui": "~57.0.21",
     "@expo/vector-icons": "^15.0.2",
+    "@react-navigation/bottom-tabs": "^7.20.0",
+    "@react-navigation/native": "^7.5.0",
     "@rnmapbox/maps": "^10.3.5",
     "expo": "~57.0.26",
     "expo-camera": "~57.0.6",

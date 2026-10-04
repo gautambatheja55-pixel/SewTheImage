@@ -14,6 +14,15 @@ export default function Index(){
   const [country,setCountry] = useState("");
   const [time,setCurrentTime] = useState("");
   const [formattedAddress,setFormattedAddress]=useState("");
+  const { setIsTabBarHidden } = use(TabBarContext);
+  useFocusEffect(() => {
+    setIsTabBarHidden(true);
+
+    return () => {
+      setIsTabBarHidden(false);
+    };
+  });
+  
  
   useEffect(()=> {
     const requestPermissions = async() => {
