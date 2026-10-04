@@ -18,8 +18,9 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { captureRef } from "react-native-view-shot";
 import CaptureButton from "./CaptureButton";
 import SatelliteMap from "./Satellitemap";
+import WeatherDisplay from "./WeatherDisplay";
 
-
+const weatherapi = process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY;
 const mapboxApiKey = process.env.EXPO_PUBLIC_MAPBOX_API_KEY;
 
 const { width, height } = Dimensions.get("screen");
@@ -281,6 +282,15 @@ export default function CameraViewComponent({
       latitude !== null &&
       longitude !== null && (
         <SatelliteMap
+          latitude={latitude}
+          longitude={longitude}
+          />
+      )}
+
+      {!showPreview &&
+      latitude !== null &&
+      longitude !== null && (
+        <WeatherDisplay
           latitude={latitude}
           longitude={longitude}
           />
