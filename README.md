@@ -8,7 +8,8 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
 
    ```bash
    npm install
-   npx expo install expo-camera expo-location expo-media-library react-native-view-shot
+   npx expo install expo-camera expo-location expo-media-library react-native-view-shot expo-file-system
+   expo-image-manipulator expo-print expo-video
    ```
 
 2. Start the app
@@ -16,10 +17,9 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    ```bash
    npx expo start
    ```
-<h2>IMP: Give permission of location first and then camera bcz for now if given permission of camera first it will open the camera without showing you location</h2><br>
 
 <h1>App Function: </h1><br>
-SewTheImage allows you to add (sew) the location and time directly into your photos<br>
+SewTheImage allows you to add (sew) the location and time directly into your photos/vedios<br>
 
 <img width="261" height="573" alt="Screenshot 2026-09-27 224135" src="https://github.com/user-attachments/assets/eab319a9-7169-4a7d-86c9-fe367de0ed6a" />
 
@@ -36,29 +36,25 @@ It has:
    <li>Flip Camera button <li>
    <li>Grid</li>
    <li>Gallery to show the photos clicked</li>
+   <li>MapBox satellite view of your location</li>
+   <li>Crop, delete, print in the App Gallery</li>
+   <li>Weather Information of the Location</li>
+   <li>Recording</li>
 </ol>
 <br>
 <h1>Project Status</h1><br>
 The project is currently incomplete and our final version would include:
 <ol>
    <li>Different UI formats for displaying data</li>
-   <li>Maps satellite view of your location</li>
-   <li>Recording</li>
-   <li>Improved UI of Camera </li>
-   <li> More features in the App Gallery</li>
-   <li>Weather Information of the Location</li>
    <li>Landscape/Horizontal Responsiveness</li>
 </ol>
 <br>
 <h1>Tech Stack</h1>
 <ol>
    <li>React Native</li>
-   <li> Expo </li>
+   <li>Expo </li>
    <li>TypeScript</li>
-   <li> Expo Camera</li>
-   <li>Expo location</li>
-   <li>Expo media Gallery</li>
-   <li>React Native View Shot</li>
+   <li>Expo libraries</li>
    <li>Ionicons</li>
 </ol>
 <br>
@@ -69,6 +65,6 @@ The project is currently incomplete and our final version would include:
    <li>expo</li>
 </ol>
 
-<h1>Permissions: camera & location </h1>
+<h1>Permissions: camera, location & media </h1>
 
 The project was developed as a team but some team members tried their best but their contributions came with significant issues and as a result the the main branch had to be restored to the last working commit. Some members faced problems with merging causing lines of code of others to be deleted.
