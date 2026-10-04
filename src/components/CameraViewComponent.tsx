@@ -327,6 +327,7 @@ export default function CameraViewComponent({
   const stoppingRef = useRef(false);
   const recordingStarted = useRef(0);
   const pinchStartZoom = useRef(0);
+<<<<<<< HEAD
   const storeRef = useRef<GalleryStore | null>(null);
   const indexRef = useRef(0);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
@@ -364,6 +365,28 @@ export default function CameraViewComponent({
     time,
     formattedAddress,
   };
+=======
+  const [showPreview, setShowPreview] = useState(false);
+  const [isCameraReady, setIsCameraReady] = useState(false);
+  const [isTakingPhoto, setIsTakingPhoto] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [timerDuration, setTimerDuration] = useState(0);
+  const [countdown, setCountdown] = useState(0);
+  const [showTimerOptions, setShowTimerOptions] = useState(false);
+
+
+  const latestImage =
+    capturedImages.length > 0
+      ? capturedImages[capturedImages.length - 1]
+      : null;
+
+ 
+
+  const takePhoto = async () => {
+    if (!isCameraReady || !cameraRef.current || isTakingPhoto) {
+      return;
+    }
+>>>>>>> 93fe308 (done)
 
   const setIsCameraReady = (ready: boolean) => {
     cameraReadyRef.current = ready;
@@ -791,6 +814,7 @@ export default function CameraViewComponent({
     .onBegin(() => {
       pinchStartZoom.current = zoom;
     })
+<<<<<<< HEAD
     .onUpdate((event) =>
       setZoom(clampZoom(pinchStartZoom.current + (event.scale - 1) * 0.5)),
     );
@@ -828,6 +852,234 @@ export default function CameraViewComponent({
                 setIsCameraReady(false);
                 Alert.alert("Camera error", error.message);
               }}
+=======
+    .onUpdate((event) => {
+      const newZoom = Math.min(
+        1,
+        Math.max(
+          0,
+          pinchStartZoom.current + (event.scale - 1) * 0.5
+        )
+      );
+
+      setZoom(newZoom);
+    });
+
+    const startTimer = (seconds: number) => {
+      setCountdown(seconds);
+
+      let remainingTime = seconds;
+
+      const interval = setInterval(() => {
+        remainingTime -= 1;
+      
+        if (remainingTime <= 0) {
+          clearInterval(interval);
+          setCountdown(0);
+          takePhoto();
+          return;
+
+        }
+
+        setCountdown(remainingTime);
+      }, 1000);
+
+      };
+
+      <TouchableOpacity
+        style={styles.timerButton}
+        onPress={() => setShowTimerOptions(!showTimerOptions)}
+        >
+
+          <Ionicons
+            name="timer-outline"
+            size={27}
+            color="white"
+            />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.timerCircle}
+          onPress={() => {
+            setShowPreview(false);
+            onClose?.();
+          }}
+          >
+
+            <Ionicons name="close" size={27} color="white"/>
+
+            </TouchableOpacity>
+
+            {showTimerOptions && (
+              <View style={styles.timerOptions}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setTimerDuration(0);
+                    setShowTimerOptions(false);
+
+                  }}
+
+                  >
+                    <Text style={styles.timerOptionText}>3s</Text>
+
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => {
+                      setTimerDuration(5);
+                      setShowTimerOptions(false);
+
+                    }}
+                    >
+                      <Text style={styles.timerOptionText}>5s</Text>
+
+                    </TouchableOpacity>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={styles.roundButton}
+              onPress={() =>{
+                setShowPreview(false);
+                onClose?.();
+              }}
+              >
+                <Ionicons name="close" size={27} color="white"/>
+              </TouchableOpacity>
+
+              const handletakephoto = () => {
+                if (countdown > 0) {
+                  return;
+                }
+
+                if (timerDuration === 0) {
+                  takePhoto();
+                  return;
+                }
+                startTimer(timerDuration);
+              };
+          
+
+
+  return (
+    <View style={styles.container}>
+
+      {!showPreview && (
+        <GestureDetector gesture={pinchGesture}>
+        <CameraView
+          ref={cameraRef}
+          style={styles.camera}
+          facing={facing}
+          zoom={zoom}
+          flash={flashMode}
+          enableTorch={flashMode === "on"}
+          onCameraReady={() =>
+            setIsCameraReady(true)
+          }
+          onMountError={(error) => {
+            console.log(
+              "Camera error:",
+              error
+            );
+
+            setIsCameraReady(false);
+          }}
+        />
+        </GestureDetector>
+      )}
+
+      {!showPreview &&
+      latitude !== null &&
+      longitude !== null && (
+        <SatelliteMap
+          latitude={latitude}
+          longitude={longitude}
+          />
+      )}
+
+      {!showPreview &&
+      latitude !== null &&
+      longitude !== null && (
+        <WeatherDisplay
+          latitude={latitude}
+          longitude={longitude}
+          />
+      )}
+
+      {showGrid && !showPreview && (
+        <View
+          pointerEvents="none"
+          style={styles.gridContainer}
+        >
+          <View
+            style={[
+              styles.gridVertical,
+              { left: "33.33%" },
+            ]}
+          />
+
+          <View
+            style={[
+              styles.gridVertical,
+              { left: "66.66%" },
+            ]}
+          />
+
+          <View
+            style={[
+              styles.gridHorizontal,
+              { top: "33.33%" },
+            ]}
+          />
+
+          <View
+            style={[
+              styles.gridHorizontal,
+              { top: "66.66%" },
+            ]}
+          />
+          {countdown > 0 && (
+            <View style={styles.countdownOverlay}>
+              <Ionicons
+              name="timer-outline"
+              size={32}
+              color="white"
+              />
+
+              <Text style={StyleSheet.countdownText}>
+                {countdown}
+
+              </Text>
+        </View>
+        )}</View>
+      )}
+
+      {!showPreview && (
+        <View style={styles.topControls}>
+
+      
+
+          <TouchableOpacity style={styles.roundButton} onPress={onClose}>
+            <Ionicons name="close" size={27} color="white"/>
+          </TouchableOpacity>
+         
+          <TouchableOpacity
+            style={styles.roundButton}
+            onPress={() =>
+              setShowGrid(
+                (current) => !current
+              )
+            }
+          >
+            <Ionicons
+              name="grid-outline"
+              size={24}
+              color={
+                showGrid
+                  ? "#FFD700"
+                  : "white"
+              }
+>>>>>>> 93fe308 (done)
             />
           </GestureDetector>
         )}
@@ -988,6 +1240,7 @@ export default function CameraViewComponent({
                 )
               }
             />
+<<<<<<< HEAD
             <TouchableOpacity
               onPress={capture}
               disabled={!canCapture}
@@ -1011,6 +1264,24 @@ export default function CameraViewComponent({
             </TouchableOpacity>
             <IconButton
               icon="camera-reverse"
+=======
+          </TouchableOpacity>
+
+  
+
+          <CaptureButton
+            onPress={handletakephoto}
+          />
+
+   
+
+          <TouchableOpacity
+            style={styles.controlButton}
+            onPress={flipCamera}
+          >
+            <Ionicons
+              name="camera-reverse"
+>>>>>>> 93fe308 (done)
               size={29}
               style={styles.controlButton}
               onPress={flipCamera}
@@ -1555,7 +1826,53 @@ const styles = StyleSheet.create({
     backgroundColor: "#262626",
     gap: 8,
   },
+<<<<<<< HEAD
   undoActions: { flexDirection: "row", gap: 28 },
   undoText: { color: "#60a5fa", fontWeight: "700", paddingVertical: 6 },
   deleteText: { color: "#fca5a5", fontWeight: "700", paddingVertical: 6 },
+=======
+
+  countdownOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  countdownCircle: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  countdownText: {
+    color: "white",
+    fontSize: 42,
+    fontWeight: "bold",
+    marginTop: 4,
+  },
+  timerButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: "center",
+    alignItems: "center"
+  },
+  timerCircle: {
+    width: 55,
+    height: 55,
+    borderRadius: 27.5,
+    backgroundColor: "rbga(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rbga(255, 255, 255, 0.5)",
+
+  },
+  
+>>>>>>> 93fe308 (done)
 });
