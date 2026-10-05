@@ -15,7 +15,7 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
 2. Start the app
 
    ```bash
-   npx expo start
+   npx expo start --dev-client
    ```
 
 <h1>App Function: </h1><br>
@@ -58,5 +58,5 @@ It has:
 </ol>
 
 <h1>Permissions: camera, location & media </h1>
-
+<h1>KNOWN LIMITATION: IN ANDROID THE VEDIO APPEARS DARKEN</h1>
 The project was developed as a team but some team members tried their best but their contributions came with significant issues and as a result the the main branch had to be restored to the last working commit. Some members faced problems with merging causing lines of code of others to be deleted.
