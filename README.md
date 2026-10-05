@@ -3,7 +3,7 @@
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
 ## Get started
-
+download apk from <a href="https://expo.dev/accounts/intellgautams-team/projects/SewTheImage/builds/8f22130a-9030-4a09-9bc7-540188d23779"> or <br>
 1. Install dependencies
 
    ```bash
@@ -11,8 +11,8 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npx expo install expo-camera expo-location expo-media-library react-native-view-shot expo-file-system
    expo-image-manipulator expo-print expo-video
    ```
-
-2. Start the app
+2. build .apk 
+3. Start the app
 
    ```bash
    npx expo start --dev-client
@@ -58,5 +58,5 @@ It has:
 </ol>
 
 <h1>Permissions: camera, location & media </h1>
-<h1>KNOWN LIMITATION: IN ANDROID THE VEDIO APPEARS DARKEN</h1>
+<h1>KNOWN LIMITATION: IN ANDROID THE VEDIO APPEARS DARKER & FLASHLIGHT DOESNT WORK FOR NOW/h1>
 The project was developed as a team but some team members tried their best but their contributions came with significant issues and as a result the the main branch had to be restored to the last working commit. Some members faced problems with merging causing lines of code of others to be deleted.
