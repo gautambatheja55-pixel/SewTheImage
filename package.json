@@ -5,13 +5,9 @@
   "dependencies": {
     "@expo/ui": "~57.0.21",
     "@expo/vector-icons": "^15.0.2",
-<<<<<<< HEAD
     "@react-navigation/bottom-tabs": "^7.20.0",
     "@react-navigation/native": "^7.5.0",
-    "@rnmapbox/maps": "^10.3.5",
-=======
     "@rnmapbox/maps": "^10.3.6",
->>>>>>> 6b37264011edadb4a83fcbe27dd811bdf3555d13
     "expo": "~57.0.26",
     "expo-camera": "~57.0.6",
     "expo-constants": "~57.0.19",
@@ -21,7 +17,7 @@
     "expo-font": "~57.0.4",
     "expo-glass-effect": "~57.0.4",
     "expo-image": "~57.0.5",
-    "expo-image-manipulator": "~57.0.20",
+    "expo-image-manipulator": "~57.0.21",
     "expo-linking": "~57.0.11",
     "expo-location": "~57.0.20",
     "expo-maps": "~57.0.3",

@@ -1,9 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import {
-  CameraView,
-  useCameraPermissions,
-  useMicrophonePermissions,
-  type CameraType,
+    CameraView,
+    useCameraPermissions,
+    useMicrophonePermissions,
+    type CameraType,
 } from "expo-camera";
 import { Directory, File, Paths } from "expo-file-system";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -12,25 +12,25 @@ import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { useVideoPlayer, VideoView } from "expo-video";
 import {
-  useEffect,
-  useRef,
-  useState,
-  type ComponentProps,
+    useEffect,
+    useRef,
+    useState,
+    type ComponentProps,
 } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  AppState,
-  FlatList,
-  Image,
-  Linking,
-  Modal,
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
+    ActivityIndicator,
+    Alert,
+    AppState,
+    FlatList,
+    Image,
+    Linking,
+    Modal,
+    Platform,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useWindowDimensions,
+    View,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { captureRef } from "react-native-view-shot";
@@ -64,9 +64,6 @@ interface CameraViewComponentProps {
 }
 
 const GALLERY_FOLDER = "sewtheimage-gallery-v1";
-const [showCaptureAnimation, setShowCaptureAnimation] = useState(false);
-
-
 const cropOptions = [
   {
     value: "original",
@@ -451,9 +448,7 @@ export default function CameraViewComponent({
   const busyRef = useRef(false);
   const recordingRef = useRef(false);
   const stoppingRef = useRef(false);
-  const recordingStarted = useRef(0);
-  const pinchStartZoom = useRef(0);
-  const storeRef = useRef<GalleryStore | null>(null);
+  const recordingStarted = useRef(0);   
   const indexRef = useRef(0);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [microphonePermission, requestMicrophonePermission] =
@@ -465,15 +460,14 @@ export default function CameraViewComponent({
   const [flashMode, setFlashMode] = useState<"off" | "on" | "auto">("off");
   const [zoom, setZoom] = useState(0);
   const [showGrid, setShowGrid] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<
-"original" | "bw" | "vintage" | "bright"
->("original");
   const [showGallery, setShowGallery] = useState(false);
   const [previewPhoto, setPreviewPhoto] = useState<MediaItem | null>(null);
   const [previewReady, setPreviewReady] = useState(false);
   const [overlays, setOverlays] = useState<PhotoOverlays>(emptyOverlays());
   const overlayRef = useRef<PhotoOverlays>(emptyOverlays());
   const [galleryIndex, setGalleryIndex] = useState(0);
+  const [galleryPhotoZoom, setGalleryPhotoZoom] = useState(1);
+  const galleryPinchStartZoom = useRef(1);
   const [cropAspect, setCropAspect] = useState<CropAspect>("square");
   const [isCameraReady, setCameraReadyState] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -571,6 +565,7 @@ export default function CameraViewComponent({
     );
     indexRef.current = next;
     setGalleryIndex(next);
+    setGalleryPhotoZoom(1);
   };
   const selectedItem = () => storeRef.current?.items[indexRef.current];
 
@@ -709,16 +704,9 @@ export default function CameraViewComponent({
       mode === "video" ? "Recording video" : "Taking photo",
       async () => {
         if (mode === "picture") {
-          setShowCaptureAnimation(true);
           const photo = await cameraRef.current!.takePictureAsync({
             quality: 1,
           });
-
-          setTimeout(() => {
-            setShowCaptureAnimation(false);
-
-          }, 150);
-
           if (!photo?.uri)
             throw new Error(
               "The camera did not return a photo. Please try again.",
@@ -924,40 +912,6 @@ export default function CameraViewComponent({
     });
   };
 
-  const rotateSelected = () => {
-    const item = selectedItem();
-
-    if (!item || item.kind !== "photo") return;
-
-    void runTask("Rotating photo", async () => {
-      const context = ImageManipulator.ImageManipulator.manipulate(
-        mediaFile(item).uri
-      );
-      context.rotate(90);
-
-      try {
-         const image = await context.renderAsync();
-
-         try {
-          const result = await image.saveAsync({
-        compress: 1,
-        format: ImageManipulator.SaveFormat.JPEG,
-      });
-      await replacePhoto(item, result.uri, {
-        width: result.width,
-        height: result.height,
-      });
-    } finally {
-      image.release();
-    }
-
-  } finally {
-    context.release();
-  }
-});
-
-};
-
   const deleteSelected = () => {
     const item = selectedItem();
     if (!item || busyRef.current) return;
@@ -1040,6 +994,20 @@ export default function CameraViewComponent({
     .onUpdate((event) =>
       setZoom(clampZoom(pinchStartZoom.current + (event.scale - 1) * 0.5)),
     );
+    const galleryPhotoPinchGesture = Gesture.Pinch()
+  .runOnJS(true)
+  .onBegin(() => {
+    galleryPinchStartZoom.current = galleryPhotoZoom;
+  })
+  .onUpdate((event) => {
+    const nextZoom = Math.max(
+      1,
+      Math.min(4, galleryPinchStartZoom.current * event.scale),
+    );
+
+    setGalleryPhotoZoom(nextZoom);
+  });
+
   const canCapture =
     isCameraReady &&
     !!store &&
@@ -1081,9 +1049,6 @@ export default function CameraViewComponent({
                 Alert.alert("Camera error", error.message);
               }}
             />
-            {showCaptureAnimation && (
-              <View style={styles.captureAnimation} />
-            )}
           </GestureDetector>
         )}
       {!previewPhoto && !showGallery && (
@@ -1176,38 +1141,6 @@ export default function CameraViewComponent({
               accessibilityLabel="Zoom in"
               onPress={() => setZoom((current) => clampZoom(current + 0.1))}
             />
-          </View>
-          <View style={styles.filterRow}>
-            <TouchableOpacity
-            style={styles.filterButton}
-            onPress={() => setSelectedFilter("original")}
-            >
-              <Text style={styles.filterText}>Original</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-            style={styles.filterButton}
-            onPress={() => setSelectedFilter("bw")}
-            >
-              <Text style={styles.filterText}>B&W</Text>
-
-            </TouchableOpacity>
-
-            <TouchableOpacity
-            style={styles.filterButton}
-            onPress={() => setSelectedFilter("vintage")}
-            >
-              <Text style={styles.filterText}>Vintage</Text>
-
-            </TouchableOpacity>
-
-            <TouchableOpacity
-            style={styles.filterButton}
-            onPress={() => setSelectedFilter("bright")}
-            >
-              <Text style={styles.filterText}>Bright</Text>
-            </TouchableOpacity>
-
           </View>
           {isRecording && (
             <Text style={styles.recordingBadge}>
@@ -1405,30 +1338,6 @@ export default function CameraViewComponent({
               <Text style={styles.message}>Preparing photo details…</Text>
             </View>
           )}
-
-            <Image
-            source={{ uri: mediaFile(previewPhoto).uri }}
-            style={[
-              styles.previewImage,
-              selectedFilter === "bw" && { opacity: 0.7 },
-              selectedFilter === "vintage" && { opacity: 0.85 },
-              selectedFilter === "bright" && { opacity: 1.2 },
-            ]}
-            onLoad={() => setPreviewReady(true)}
-            onError={() => Alert.alert("clicking")}
-            />
-
-            <View style={styles.metadatabadge}>
-              <Text style={StyleSheet.metadataText}>
-                📍 {city}, {country}
-
-              </Text>
-              <Text style={StyleSheet.metadataText}>
-                 🕐 {time}
-              </Text>
-              </View>
-          
-
           <View style={[styles.topControls, styles.previewControls]}>
             <IconButton
               icon="close"
@@ -1518,13 +1427,21 @@ export default function CameraViewComponent({
                   })}
                   renderItem={({ item, index }) => (
                     <View style={[styles.page, { width }]}>
-                      {item.kind === "photo" ? (
-                        <Image
-                          source={{ uri: mediaFile(item).uri }}
-                          style={styles.galleryMedia}
-                          resizeMode="contain"
-                        />
-                      ) : index === galleryIndex ? (
+                     {item.kind === "photo" ? (
+                        <GestureDetector gesture={galleryPhotoPinchGesture}>
+                            <Image
+                            source={{ uri: mediaFile(item).uri }}
+                            style={[
+                                styles.galleryMedia,
+                                styles.galleryZoomImage,
+                                {
+                                    transform: [{ scale: galleryPhotoZoom }],
+                                },
+                            ]}
+                            resizeMode="contain"
+                            />
+                            </GestureDetector>
+                            ) : index === galleryIndex ? (
                         <GalleryVideo
                           key={item.fileName}
                           uri={mediaFile(item).uri}
@@ -1640,17 +1557,6 @@ export default function CameraViewComponent({
                       disabled={isBusy}
                       onPress={deleteSelected}
                     />
-
-                    <TouchableOpacity
-                      style={styles.rotateButton}
-                      onPress={rotateSelected}
-                      >
-                        <Ionicons
-                          name="refresh-outline"
-                          size={27}
-                          color="white"
-                          />
-                      </TouchableOpacity>
                   </View>
                 </>
               )}
@@ -1958,6 +1864,10 @@ const styles = StyleSheet.create({
   galleryBody: { flex: 1 },
   page: { height: "100%", alignItems: "center", justifyContent: "center" },
   galleryMedia: { width: "100%", height: "100%" },
+  galleryZoomImage: {
+  width: "100%",
+  height: "100%",
+},
   galleryFooter: {
     paddingHorizontal: 16,
     paddingTop: 12,
@@ -1999,49 +1909,4 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   undoActions: { flexDirection: "row", gap: 28 },
-  captureAnimation: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: "white",
-    zIndex: 999,
-  },
-  filterRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 8,
-    marginVertical: 10,
-  },
-  filterButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "rbga(0, 0, 0, 0.6)",
-
-  },
-  filterText: {
-    color: "white",
-    fontSize: 14,
-  },
-  rotateButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "rbga(0, 0, 0, 0.6)",
-
-  },
-  metadataBadge: {
-    position: "absolute",
-    bottom: 20,
-    left: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: "rbga(0, 0, 0, 0.65)",
-  },
-
-  metadataText: {
-    color: "white",
-    fontSize: 13,
-    marginVertical: 2,
-  },
-  
 });

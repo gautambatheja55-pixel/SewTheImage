@@ -20,44 +20,43 @@ export default function WeatherDisplay({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (latitude === null || longitude === null) return;
+ useEffect(() => {
+  if (latitude == null || longitude == null) return;
 
-    const fetchWeatherData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  const controller = new AbortController();
 
-        const response = await fetch(
-          `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${weatherApiKey}&units=metric`,
-        );
+  async function fetchWeather() {
+    try {
+      const response = await fetch(
+        `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${weatherApiKey}&units=metric`,
+        { signal: controller.signal }
+      );
 
-        if (!response.ok) {
-          throw new Error("Failed to fetch weather data");
-        }
-
-        const data = await response.json();
-        setWeather({
-          temp: Math.round(data.main.temp),
-          description: data.weather[0]?.description ?? "",
-      });
-
-      setLoading(false);
-
-
-      } catch (error) {
-        console.log("Weather fetch error:", error);
-        setWeather(null);
-        setError("Unable to fetch weather");
-        setLoading(false);
-
-
-    
+      if (!response.ok) {
+        throw new Error(`Weather API error: ${response.status}`);
       }
-    };
 
-    void fetchWeatherData();
-  }, [latitude, longitude]);
+      const data = await response.json();
+
+      setWeather({
+        temp: data.main.temp,
+        description: data.weather[0].description,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return;
+      }
+
+      console.error("Weather fetch failed:", error);
+    }
+  }
+
+  fetchWeather();
+
+  return () => {
+    controller.abort();
+  };
+}, [latitude, longitude]);
 
   return (
     <View style={styles.container}>

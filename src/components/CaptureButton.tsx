@@ -1,7 +1,7 @@
 import {
-    StyleSheet,
-    TouchableOpacity,
-    View,
+  StyleSheet,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 interface CaptureButtonProps {
@@ -47,3 +47,4 @@ const styles = StyleSheet.create({
         backgroundColor: "white",
     },
 });
+
