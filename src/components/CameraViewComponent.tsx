@@ -36,7 +36,7 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { captureRef } from "react-native-view-shot";
 import SatelliteMap from "./Satellitemap";
 import WeatherDisplay from "./WeatherDisplay";
-import { getWeather } from "./weatherServices";
+
 type MediaKind = "photo" | "video";
 type CaptureMode = "picture" | "video";
 type CropAspect = "original" | "square" | "fourThree";
@@ -274,7 +274,6 @@ async function withTimeout<T>(
     if (timer !== undefined) clearTimeout(timer);
   }
 }
-
 async function loadPhotoOverlays(
   latitude: number | null,
   longitude: number | null,
@@ -283,55 +282,54 @@ async function loadPhotoOverlays(
     weather: null as string | null,
     mapUri: null as string | null,
     missing: [] as string[],
-    loading: true,
-    mapReady: false,
   };
-
-  if (latitude === null || longitude === null) {
-    return result;
-  }
-
+  if (latitude === null || longitude === null) return result;
   if (
     !Number.isFinite(latitude) ||
     !Number.isFinite(longitude) ||
     Math.abs(latitude) > 90 ||
     Math.abs(longitude) > 180
   ) {
-    return {
-      ...result,
-      missing: ["weather", "satellite map"],
-    };
+    return { ...result, missing: ["weather", "satellite map"] };
   }
-
   await Promise.all([
     (async () => {
-  try {
-    const data = await withTimeout(
-      getWeather(latitude, longitude),
-    );
-
-    result.weather =
-      `${Math.round(data.temp)}°C · ${data.description}`;
-  } catch (error) {
-    console.warn("Could not load weather overlay:", error);
-    result.missing.push("weather");
-  }
-})(),
-          
-
+      const controller = new AbortController();
+      try {
+        const key = process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY;
+        if (!key) throw new Error("Weather key is missing.");
+        const data = await withTimeout(
+          fetch(
+            `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${encodeURIComponent(key)}&units=metric`,
+            { signal: controller.signal },
+          ).then(async (response) => {
+            if (!response.ok) throw new Error("Weather unavailable.");
+            return (await response.json()) as {
+              main?: { temp?: number };
+              weather?: { description?: string }[];
+            };
+          }),
+        );
+        if (
+          typeof data.main?.temp !== "number" ||
+          !Number.isFinite(data.main.temp) ||
+          !data.weather?.[0]?.description
+        )
+          throw new Error("Incomplete weather data.");
+        result.weather = `${Math.round(data.main.temp)}°C · ${data.weather[0].description}`;
+      } catch {
+        result.missing.push("weather");
+      } finally {
+        controller.abort();
+      }
+    })(),
     (async () => {
       try {
         const key = process.env.EXPO_PUBLIC_MAPBOX_API_KEY;
-
-        if (!key) {
-          throw new Error("Mapbox API key is missing.");
-        }
-
+        if (!key) throw new Error("Map key is missing.");
         const mapbox = require("@rnmapbox/maps")
           .default as typeof import("@rnmapbox/maps").default;
-
         await withTimeout(Promise.resolve(mapbox.setAccessToken(key)));
-
         const uri = await withTimeout(
           mapbox.snapshotManager.takeSnap({
             centerCoordinate: [longitude, latitude],
@@ -343,25 +341,15 @@ async function loadPhotoOverlays(
             withLogo: true,
           }),
         );
-
-        if (!uri) {
-          throw new Error("Satellite map image unavailable.");
-        }
-
-        result.mapUri = uri.startsWith("/")
-          ? `file://${uri}`
-          : uri;
-      } catch (error) {
-        console.warn("Could not load satellite map:", error);
+        if (!uri) throw new Error("Map image unavailable.");
+        result.mapUri = uri.startsWith("/") ? `file://${uri}` : uri;
+      } catch {
         result.missing.push("satellite map");
       }
     })(),
   ]);
-
   return result;
 }
-
-
 
 type IconButtonProps = ComponentProps<typeof TouchableOpacity> & {
   icon: ComponentProps<typeof Ionicons>["name"];
@@ -460,7 +448,9 @@ export default function CameraViewComponent({
   const busyRef = useRef(false);
   const recordingRef = useRef(false);
   const stoppingRef = useRef(false);
-  const recordingStarted = useRef(0);   
+  const recordingStarted = useRef(0);
+  const pinchStartZoom = useRef(0);
+  const storeRef = useRef<GalleryStore | null>(null);
   const indexRef = useRef(0);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [microphonePermission, requestMicrophonePermission] =
@@ -473,13 +463,34 @@ export default function CameraViewComponent({
   const [zoom, setZoom] = useState(0);
   const [showGrid, setShowGrid] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
+  const [galleryPhotoZoom, setGalleryPhotoZoom] = useState(1);
+  const galleryPinchStartZoom = useRef(1);
+
+  const galleryPhotoPinchGesture = Gesture.Pinch()
+  .runOnJS(true)
+  .onBegin(() => {
+    galleryPinchStartZoom.current = galleryPhotoZoom;
+  })
+  .onUpdate((event) => {
+    const nextZoom = Math.max(
+      1,
+      Math.min(4, galleryPinchStartZoom.current * event.scale),
+    );
+
+    setGalleryPhotoZoom(nextZoom);
+  });
+
+
   const [previewPhoto, setPreviewPhoto] = useState<MediaItem | null>(null);
   const [previewReady, setPreviewReady] = useState(false);
   const [overlays, setOverlays] = useState<PhotoOverlays>(emptyOverlays());
   const overlayRef = useRef<PhotoOverlays>(emptyOverlays());
   const [galleryIndex, setGalleryIndex] = useState(0);
-  const [galleryPhotoZoom, setGalleryPhotoZoom] = useState(1);
-  const galleryPinchStartZoom = useRef(1);
+  useEffect(() => {
+  setGalleryPhotoZoom(1);
+  galleryPinchStartZoom.current = 1;
+}, [galleryIndex]);
+
   const [cropAspect, setCropAspect] = useState<CropAspect>("square");
   const [isCameraReady, setCameraReadyState] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -491,8 +502,6 @@ export default function CameraViewComponent({
     !["inactive", "background"].includes(AppState.currentState),
   );
   const items = store?.items ?? [];
-  const storeRef = useRef<any>(null);
-  const pinchStartZoom = useRef<number>(1);
   const selected = items[galleryIndex];
   const isPhoto = selected?.kind === "photo";
   const details = {
@@ -579,7 +588,6 @@ export default function CameraViewComponent({
     );
     indexRef.current = next;
     setGalleryIndex(next);
-    setGalleryPhotoZoom(1);
   };
   const selectedItem = () => storeRef.current?.items[indexRef.current];
 
@@ -1008,20 +1016,6 @@ export default function CameraViewComponent({
     .onUpdate((event) =>
       setZoom(clampZoom(pinchStartZoom.current + (event.scale - 1) * 0.5)),
     );
-    const galleryPhotoPinchGesture = Gesture.Pinch()
-  .runOnJS(true)
-  .onBegin(() => {
-    galleryPinchStartZoom.current = galleryPhotoZoom;
-  })
-  .onUpdate((event) => {
-    const nextZoom = Math.max(
-      1,
-      Math.min(4, galleryPinchStartZoom.current * event.scale),
-    );
-
-    setGalleryPhotoZoom(nextZoom);
-  });
-
   const canCapture =
     isCameraReady &&
     !!store &&
@@ -1369,15 +1363,109 @@ export default function CameraViewComponent({
               onPress={() => finishPreview(true)}
             />
           </View>
-          <View style={styles.bottomButtons}>
-            <IconButton
-              icon="camera-reverse-outline"
-              accessibilityLabel="Retake"
-              style={styles.previewButton}
-              disabled={isBusy}
-              onPress={retakePhoto}
-            />
-          </View>
+          
+<View style={styles.previewActionBar}>
+  <TouchableOpacity
+    style={styles.previewAction}
+    disabled={isBusy || !previewPhoto || previewPhoto.kind !== "photo"}
+    onPress={() => {
+      if (!previewPhoto) return;
+      void runTask("Printing photo", async () => {
+        const base64 = await mediaFile(previewPhoto).base64();
+        const mime = previewPhoto.fileName.endsWith(".png")
+          ? "image/png"
+          : "image/jpeg";
+
+        await Print.printAsync({
+          html: `<!DOCTYPE html>
+            <html>
+              <head>
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <style>
+                  @page { margin: 12mm; }
+                  body { margin: 0; }
+                  img {
+                    display: block;
+                    max-width: 100%;
+                    max-height: 250mm;
+                    margin: auto;
+                    object-fit: contain;
+                  }
+                </style>
+              </head>
+              <body>
+                <img src="data:${mime};base64,${base64}" />
+              </body>
+            </html>`,
+        });
+      });
+    }}
+  >
+    <Ionicons name="print-outline" size={24} color="white" />
+    <Text style={styles.previewActionText}>Print</Text>
+  </TouchableOpacity>
+
+  <TouchableOpacity
+    style={styles.previewAction}
+    disabled={isBusy || !previewPhoto}
+    onPress={() => {
+      if (!previewPhoto) return;
+      void runTask("Sharing photo", async () => {
+        if (!(await Sharing.isAvailableAsync())) {
+          throw new Error("Sharing is not available on this device.");
+        }
+        await Sharing.shareAsync(mediaFile(previewPhoto).uri);
+      });
+    }}
+  >
+    <Ionicons name="share-outline" size={24} color="white" />
+    <Text style={styles.previewActionText}>Share</Text>
+  </TouchableOpacity>
+
+  <TouchableOpacity
+    style={styles.previewAction}
+    disabled={isBusy || !previewPhoto}
+    onPress={() => {
+      if (!previewPhoto) return;
+
+      Alert.alert(
+        "Delete photo",
+        "Are you sure you want to discard this photo?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: retakePhoto,
+          },
+        ],
+      );
+    }}
+  >
+    <Ionicons name="trash-outline" size={24} color="white" />
+    <Text style={styles.previewActionText}>Delete</Text>
+  </TouchableOpacity>
+
+  <TouchableOpacity
+    style={styles.previewAction}
+    disabled={isBusy}
+    onPress={() => finishPreview(true)}
+  >
+    <Ionicons name="checkmark-circle-outline" size={24} color="white" />
+    <Text style={styles.previewActionText}>Save</Text>
+  </TouchableOpacity>
+</View>
+
+<TouchableOpacity
+  style={styles.retakeButton}
+  disabled={isBusy}
+  onPress={retakePhoto}
+>
+  <Ionicons name="camera-reverse-outline" size={22} color="white" />
+  <Text style={styles.previewActionText}>Retake</Text>
+</TouchableOpacity>
+
+
         </View>
       )}
       {isBusy && !isRecording && (
@@ -1441,21 +1529,21 @@ export default function CameraViewComponent({
                   })}
                   renderItem={({ item, index }) => (
                     <View style={[styles.page, { width }]}>
-                     {item.kind === "photo" ? (
+                      {item.kind === "photo" ? (
                         <GestureDetector gesture={galleryPhotoPinchGesture}>
-                            <Image
-                            source={{ uri: mediaFile(item).uri }}
-                            style={[
-                                styles.galleryMedia,
-                                styles.galleryZoomImage,
-                                {
-                                    transform: [{ scale: galleryPhotoZoom }],
-                                },
-                            ]}
-                            resizeMode="contain"
-                            />
-                            </GestureDetector>
-                            ) : index === galleryIndex ? (
+                          <Image
+                          source={{ uri: mediaFile(item).uri }}
+                          style={[
+                            styles.galleryMedia,
+                            {
+                              transform: [{ scale: galleryPhotoZoom }],
+                            },
+                          ]}
+                          resizeMode="contain"
+                          />
+                          </GestureDetector>
+
+                      ) : index === galleryIndex ? (
                         <GalleryVideo
                           key={item.fileName}
                           uri={mediaFile(item).uri}
@@ -1878,10 +1966,6 @@ const styles = StyleSheet.create({
   galleryBody: { flex: 1 },
   page: { height: "100%", alignItems: "center", justifyContent: "center" },
   galleryMedia: { width: "100%", height: "100%" },
-  galleryZoomImage: {
-  width: "100%",
-  height: "100%",
-},
   galleryFooter: {
     paddingHorizontal: 16,
     paddingTop: 12,
@@ -1923,4 +2007,44 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   undoActions: { flexDirection: "row", gap: 28 },
+  previewActionBar: {
+  position: "absolute",
+  left: 16,
+  right: 16,
+  bottom: 88,
+  zIndex: 30,
+  flexDirection: "row",
+  justifyContent: "space-around",
+  alignItems: "center",
+  paddingVertical: 14,
+  paddingHorizontal: 6,
+  borderRadius: 22,
+  backgroundColor: "rgba(25,25,25,0.92)",
+},
+previewAction: {
+  flex: 1,
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 6,
+  paddingVertical: 6,
+},
+previewActionText: {
+  color: "white",
+  fontSize: 12,
+  fontWeight: "500",
+},
+retakeButton: {
+  position: "absolute",
+  bottom: 24,
+  alignSelf: "center",
+  zIndex: 30,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+  paddingHorizontal: 22,
+  paddingVertical: 12,
+  borderRadius: 24,
+  backgroundColor: "rgba(25,25,25,0.92)",
+},
 });

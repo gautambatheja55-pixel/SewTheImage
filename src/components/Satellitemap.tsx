@@ -68,13 +68,14 @@ export default function SatelliteMap({
                             const styles = StyleSheet.create({
                                 container: {
                                     position: "absolute",
-                                    right: 16,
-                                    bottom: 16,
-                                    width: 150,
-                                    height: 130,
-                                    borderRadius: 17,
-                                    overflow: "hidden",
-
+                                    right: "3%",
+                                    bottom: "30%",
+                                    width: "36%",
+                                    aspectRatio:4/3,
+                                    overflow:"hidden",
+                                    height: 90,
+                                    borderRadius: 8,
+                
 
                                 },
 
