@@ -1,9 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import {
-    CameraView,
-    useCameraPermissions,
-    useMicrophonePermissions,
-    type CameraType,
+  CameraView,
+  useCameraPermissions,
+  useMicrophonePermissions,
+  type CameraType,
 } from "expo-camera";
 import { Directory, File, Paths } from "expo-file-system";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -12,31 +12,31 @@ import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { useVideoPlayer, VideoView } from "expo-video";
 import {
-    useEffect,
-    useRef,
-    useState,
-    type ComponentProps,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
 } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    AppState,
-    FlatList,
-    Image,
-    Linking,
-    Modal,
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    useWindowDimensions,
-    View,
+  ActivityIndicator,
+  Alert,
+  AppState,
+  FlatList,
+  Image,
+  Linking,
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { captureRef } from "react-native-view-shot";
 import SatelliteMap from "./Satellitemap";
 import WeatherDisplay from "./WeatherDisplay";
-
+import { getWeather } from "./weatherServices";
 type MediaKind = "photo" | "video";
 type CaptureMode = "picture" | "video";
 type CropAspect = "original" | "square" | "fourThree";
@@ -274,6 +274,7 @@ async function withTimeout<T>(
     if (timer !== undefined) clearTimeout(timer);
   }
 }
+
 async function loadPhotoOverlays(
   latitude: number | null,
   longitude: number | null,
@@ -282,54 +283,55 @@ async function loadPhotoOverlays(
     weather: null as string | null,
     mapUri: null as string | null,
     missing: [] as string[],
+    loading: true,
+    mapReady: false,
   };
-  if (latitude === null || longitude === null) return result;
+
+  if (latitude === null || longitude === null) {
+    return result;
+  }
+
   if (
     !Number.isFinite(latitude) ||
     !Number.isFinite(longitude) ||
     Math.abs(latitude) > 90 ||
     Math.abs(longitude) > 180
   ) {
-    return { ...result, missing: ["weather", "satellite map"] };
+    return {
+      ...result,
+      missing: ["weather", "satellite map"],
+    };
   }
+
   await Promise.all([
     (async () => {
-      const controller = new AbortController();
-      try {
-        const key = process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY;
-        if (!key) throw new Error("Weather key is missing.");
-        const data = await withTimeout(
-          fetch(
-            `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${encodeURIComponent(key)}&units=metric`,
-            { signal: controller.signal },
-          ).then(async (response) => {
-            if (!response.ok) throw new Error("Weather unavailable.");
-            return (await response.json()) as {
-              main?: { temp?: number };
-              weather?: { description?: string }[];
-            };
-          }),
-        );
-        if (
-          typeof data.main?.temp !== "number" ||
-          !Number.isFinite(data.main.temp) ||
-          !data.weather?.[0]?.description
-        )
-          throw new Error("Incomplete weather data.");
-        result.weather = `${Math.round(data.main.temp)}°C · ${data.weather[0].description}`;
-      } catch {
-        result.missing.push("weather");
-      } finally {
-        controller.abort();
-      }
-    })(),
+  try {
+    const data = await withTimeout(
+      getWeather(latitude, longitude),
+    );
+
+    result.weather =
+      `${Math.round(data.temp)}°C · ${data.description}`;
+  } catch (error) {
+    console.warn("Could not load weather overlay:", error);
+    result.missing.push("weather");
+  }
+})(),
+          
+
     (async () => {
       try {
         const key = process.env.EXPO_PUBLIC_MAPBOX_API_KEY;
-        if (!key) throw new Error("Map key is missing.");
+
+        if (!key) {
+          throw new Error("Mapbox API key is missing.");
+        }
+
         const mapbox = require("@rnmapbox/maps")
           .default as typeof import("@rnmapbox/maps").default;
+
         await withTimeout(Promise.resolve(mapbox.setAccessToken(key)));
+
         const uri = await withTimeout(
           mapbox.snapshotManager.takeSnap({
             centerCoordinate: [longitude, latitude],
@@ -341,15 +343,25 @@ async function loadPhotoOverlays(
             withLogo: true,
           }),
         );
-        if (!uri) throw new Error("Map image unavailable.");
-        result.mapUri = uri.startsWith("/") ? `file://${uri}` : uri;
-      } catch {
+
+        if (!uri) {
+          throw new Error("Satellite map image unavailable.");
+        }
+
+        result.mapUri = uri.startsWith("/")
+          ? `file://${uri}`
+          : uri;
+      } catch (error) {
+        console.warn("Could not load satellite map:", error);
         result.missing.push("satellite map");
       }
     })(),
   ]);
+
   return result;
 }
+
+
 
 type IconButtonProps = ComponentProps<typeof TouchableOpacity> & {
   icon: ComponentProps<typeof Ionicons>["name"];
@@ -479,6 +491,8 @@ export default function CameraViewComponent({
     !["inactive", "background"].includes(AppState.currentState),
   );
   const items = store?.items ?? [];
+  const storeRef = useRef<any>(null);
+  const pinchStartZoom = useRef<number>(1);
   const selected = items[galleryIndex];
   const isPhoto = selected?.kind === "photo";
   const details = {

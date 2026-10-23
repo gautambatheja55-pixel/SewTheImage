@@ -1,76 +1,81 @@
+
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { getWeather } from "./weatherServices";
 
 const weatherApiKey = process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY;
+
 
 type WeatherDisplayProps = {
   latitude: number;
   longitude: number;
 };
 
+type WeatherData = {
+  temp: number;
+  description: string;
+};
+
 export default function WeatherDisplay({
   latitude,
   longitude,
 }: WeatherDisplayProps) {
-  const [weatherData, setWeather] = useState<{
-    temp: number;
-    description: string;
-  } | null>(null);
-
+  const [weatherData, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
- useEffect(() => {
-  if (latitude == null || longitude == null) return;
-
-  const controller = new AbortController();
+  useEffect(() => {
+  let active = true;
 
   async function fetchWeather() {
+    setLoading(true);
+    setError(null);
+
     try {
-      const response = await fetch(
-        `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${weatherApiKey}&units=metric`,
-        { signal: controller.signal }
-      );
+      const data = await getWeather(latitude, longitude);
 
-      if (!response.ok) {
-        throw new Error(`Weather API error: ${response.status}`);
+      if (active) {
+        setWeather(data);
       }
-
-      const data = await response.json();
-
-      setWeather({
-        temp: data.main.temp,
-        description: data.weather[0].description,
-      });
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        return;
+    } catch (err) {
+      if (active) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load weather."
+        );
       }
-
-      console.error("Weather fetch failed:", error);
+    } finally {
+      if (active) {
+        setLoading(false);
+      }
     }
   }
 
-  fetchWeather();
+  void fetchWeather();
 
   return () => {
-    controller.abort();
+    active = false;
   };
 }, [latitude, longitude]);
 
+
   return (
     <View style={styles.container}>
-      {loading && <Text style={styles.text}>Loading...</Text>}
-
-      {!loading && error && <Text style={styles.text}>{error}</Text>}
-
-      {weatherData && !loading && !error && (
+      {loading ? (
+        <Text style={styles.text}>Loading weather...</Text>
+      ) : error ? (
+        <Text style={styles.text}>{error}</Text>
+      ) : weatherData ? (
         <View style={styles.weatherRow}>
-
-          <Text style={styles.text}>{Math.round(weatherData.temp)}°C</Text>
-          <Text style={styles.text}>{weatherData.description}</Text>
+          <Text style={styles.text}>
+            {Math.round(weatherData.temp)}°C
+          </Text>
+          <Text style={styles.text}>
+            {weatherData.description}
+          </Text>
         </View>
-      )}
+      ) : null}
     </View>
   );
 }
@@ -80,18 +85,20 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 380,
     left: 20,
+    maxWidth: "85%",
     padding: 10,
     backgroundColor: "rgba(0, 0, 0, 0.70)",
-    borderRadius:20,
-    
+    borderRadius: 12,
   },
-  weatherRow:{
-    flexDirection:"row",
-    alignItems:"center",
-    gap:6,
+  weatherRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
   },
   text: {
     color: "white",
     fontSize: 10,
   },
 });
+
